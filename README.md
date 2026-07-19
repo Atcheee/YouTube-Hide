@@ -1,18 +1,23 @@
-# Hide Streamed YouTube Videos
+# YouTube Hide
 
-Lightweight Manifest V3 extension for Brave and Chrome. It automatically hides YouTube video cards whose metadata contains:
+Lightweight Manifest V3 extension for Brave and Chrome. It automatically hides:
 
-`Streamed X days ago`
+- YouTube video cards whose metadata contains labels like `Streamed 1 hour ago`, `Streamed 3 days ago`, `Streamed 2 weeks ago` (any relative time unit)
+- Shorts shelves and individual Shorts cards (home feed carousels, search, recommendations, etc.)
+- Playlist Mix cards (e.g. "My Mix" with the Mix badge / radio playlist links)
 
-Both `Streamed 1 day ago` and plural day counts are supported.
+More hide options may be added over time.
 
 ## Behavior
 
 - Runs on every `youtube.com` page.
 - Handles YouTube's single-page navigation and dynamically loaded video lists.
 - Covers home feeds, search results, channel grids, playlists, and watch-page recommendations.
-- Hides only matching video cards; it does not remove or alter videos in your account.
-- Requires no extension permissions beyond access to YouTube pages.
+- Skips streamed-video hiding on channel **Streams** tabs (`…/streams`).
+- Skips Shorts hiding on the **Shorts** feed (`/shorts`).
+- Toggle each option from the extension popup; preferences are saved in sync storage.
+- Hides only matching cards/sections; it does not remove or alter videos in your account.
+- Needs the `storage` permission so the toggles can persist across sessions.
 
 ## Install in Brave
 
@@ -32,6 +37,7 @@ Both `Streamed 1 day ago` and plural day counts are supported.
 
 ## Files
 
-- `manifest.json`: Manifest V3 registration for YouTube pages.
-- `content.js`: Video-card detection, SPA navigation handling, and dynamic-content observer.
-- `styles.css`: Hides matched cards.
+- `manifest.json`: Manifest V3 registration for YouTube pages, popup, and storage.
+- `popup.html` / `popup.js` / `popup.css`: Extension popup with hide toggles.
+- `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
+- `styles.css`: Hides matched cards and sections.

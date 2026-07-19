@@ -1,8 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Hide Streamed YouTube Videos",
-  "version": "1.0.0",
-  "description": "Automatically hides YouTube video cards marked as streamed a number of days ago.",
+  "name": "YouTube Hide",
+  "version": "1.4.0",
+  "description": "Hide streamed videos, Shorts, Mixes, and other clutter on YouTube.",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_title": "YouTube Hide",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": [

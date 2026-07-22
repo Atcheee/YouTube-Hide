@@ -46,6 +46,16 @@ body {
   font-size: 12px;
 }
 
+.refresh-hint {
+  margin: -6px 0 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .toggle {
   display: flex;
   align-items: center;

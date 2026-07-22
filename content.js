@@ -5,10 +5,14 @@
   const STREAMED_STORAGE_KEY = "hideStreamedEnabled";
   const SHORTS_STORAGE_KEY = "hideShortsEnabled";
   const MIX_STORAGE_KEY = "hideMixEnabled";
+  const MUSIC_STORAGE_KEY = "hideMusicEnabled";
   // Matches metadata like "Streamed 1 hour ago", "Streamed 3 days ago", etc.
   const STREAMED_AGO_PATTERN =
     /\bStreamed\s+\d[\d,.]*\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b/i;
   const MIX_BADGE_PATTERN = /^mix$/i;
+  const DURATION_BADGE_PATTERN = /^\d{1,2}:\d{2}(?::\d{2})?$/;
+  // Music-note glyph used on music-video thumbnail duration badges.
+  const MUSIC_NOTE_PATH_PATTERN = /M5\.5 1\.383|a2\.25 2\.25 0 101 1\.871/;
   const CARD_SELECTOR = [
     "ytd-rich-item-renderer",
     "ytd-video-renderer",
@@ -35,6 +39,7 @@
   let hideStreamedEnabled = true;
   let hideShortsEnabled = true;
   let hideMixEnabled = true;
+  let hideMusicEnabled = true;
   let lastPathname = location.pathname;
 
   function isStreamsPage() {
@@ -57,6 +62,10 @@
 
   function shouldHideMix() {
     return hideMixEnabled;
+  }
+
+  function shouldHideMusic() {
+    return hideMusicEnabled;
   }
 
   function outermostVideoCard(element) {
@@ -143,6 +152,38 @@
     return Array.from(links).some((link) => hasMixHref(link.getAttribute("href")));
   }
 
+  function isMusicVideoCard(card) {
+    // Classic cards: thumbnail time overlay marked as music.
+    if (card.querySelector('ytd-thumbnail-overlay-time-status-renderer[overlay-style="MUSIC"]')) {
+      return true;
+    }
+
+    // Lockup cards: music-note SVG on the thumbnail duration badge.
+    const thumbnailRoots = card.querySelectorAll(
+      "yt-thumbnail-view-model, yt-thumbnail-badge-view-model, .ytThumbnailBottomOverlayViewModelBadge, ytd-thumbnail, ytd-thumbnail-overlay-time-status-renderer, a.ytLockupViewModelContentImage"
+    );
+    for (const root of thumbnailRoots) {
+      const paths = root.querySelectorAll("path");
+      if (
+        Array.from(paths).some((path) =>
+          MUSIC_NOTE_PATH_PATTERN.test(path.getAttribute("d") || "")
+        )
+      ) {
+        return true;
+      }
+    }
+
+    // Fallback: music icon next to a duration timestamp on the thumbnail badge.
+    const badges = card.querySelectorAll(
+      "yt-thumbnail-badge-view-model badge-shape, .ytThumbnailBottomOverlayViewModelBadge badge-shape"
+    );
+    return Array.from(badges).some((badge) => {
+      if (!badge.querySelector(".ytBadgeShapeIcon")) return false;
+      const text = (badge.querySelector(".ytBadgeShapeText")?.textContent || "").trim();
+      return DURATION_BADGE_PATTERN.test(text);
+    });
+  }
+
   function sectionTitleText(section) {
     const title = section.querySelector("#title, #title-text #title, #title-container #title");
     return (title?.textContent || "").trim();
@@ -166,7 +207,8 @@
     const hide =
       (shouldHideStreamed() && containsStreamedLabel(card)) ||
       (shouldHideShorts() && isShortsCard(card)) ||
-      (shouldHideMix() && isMixCard(card));
+      (shouldHideMix() && isMixCard(card)) ||
+      (shouldHideMusic() && isMusicVideoCard(card));
 
     card.classList.toggle(HIDDEN_CLASS, hide);
   }
@@ -245,7 +287,12 @@
   const observer = new MutationObserver(handleMutations);
 
   function scanPage() {
-    if (!shouldHideStreamed() && !shouldHideShorts() && !shouldHideMix()) {
+    if (
+      !shouldHideStreamed() &&
+      !shouldHideShorts() &&
+      !shouldHideMix() &&
+      !shouldHideMusic()
+    ) {
       clearHiddenElements();
       pendingCards.clear();
       pendingSections.clear();
@@ -255,10 +302,11 @@
     scanRoot(document);
   }
 
-  function applySettings(nextStreamed, nextShorts, nextMix) {
+  function applySettings(nextStreamed, nextShorts, nextMix, nextMusic) {
     hideStreamedEnabled = Boolean(nextStreamed);
     hideShortsEnabled = Boolean(nextShorts);
     hideMixEnabled = Boolean(nextMix);
+    hideMusicEnabled = Boolean(nextMusic);
     scanPage();
   }
 
@@ -277,13 +325,15 @@
       {
         [STREAMED_STORAGE_KEY]: true,
         [SHORTS_STORAGE_KEY]: true,
-        [MIX_STORAGE_KEY]: true
+        [MIX_STORAGE_KEY]: true,
+        [MUSIC_STORAGE_KEY]: true
       },
       (result) => {
         applySettings(
           result[STREAMED_STORAGE_KEY],
           result[SHORTS_STORAGE_KEY],
-          result[MIX_STORAGE_KEY]
+          result[MIX_STORAGE_KEY],
+          result[MUSIC_STORAGE_KEY]
         );
       }
     );
@@ -294,6 +344,7 @@
       let nextStreamed = hideStreamedEnabled;
       let nextShorts = hideShortsEnabled;
       let nextMix = hideMixEnabled;
+      let nextMusic = hideMusicEnabled;
       let changed = false;
 
       if (Object.hasOwn(changes, STREAMED_STORAGE_KEY)) {
@@ -311,7 +362,12 @@
         changed = true;
       }
 
-      if (changed) applySettings(nextStreamed, nextShorts, nextMix);
+      if (Object.hasOwn(changes, MUSIC_STORAGE_KEY)) {
+        nextMusic = changes[MUSIC_STORAGE_KEY].newValue !== false;
+        changed = true;
+      }
+
+      if (changed) applySettings(nextStreamed, nextShorts, nextMix, nextMusic);
     });
 
     observer.observe(document.documentElement, {
@@ -322,6 +378,14 @@
 
     document.addEventListener("yt-navigate-finish", handleNavigation);
     window.addEventListener("popstate", handleNavigation);
+
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type === "youtube-hide-ping") {
+        sendResponse({ ok: true, features: ["streamed", "shorts", "mix", "music"] });
+        return true;
+      }
+      return false;
+    });
   }
 
   if (document.readyState === "loading") {

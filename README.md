@@ -5,6 +5,7 @@ Lightweight Manifest V3 extension for Brave and Chrome. It automatically hides:
 - YouTube video cards whose metadata contains labels like `Streamed 1 hour ago`, `Streamed 3 days ago`, `Streamed 2 weeks ago` (any relative time unit)
 - Shorts shelves and individual Shorts cards (home feed carousels, search, recommendations, etc.)
 - Playlist Mix cards (e.g. "My Mix" with the Mix badge / radio playlist links)
+- Music videos (thumbnail duration badge with the music-note icon, including lockup cards)
 
 More hide options may be added over time.
 

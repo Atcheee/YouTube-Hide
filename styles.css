@@ -1,3 +1,8 @@
-.hide-streamed-days-video {
+.hide-streamed-days-video,
+yt-lockup-view-model.hide-streamed-days-video,
+ytd-rich-item-renderer.hide-streamed-days-video,
+ytd-video-renderer.hide-streamed-days-video,
+ytd-compact-video-renderer.hide-streamed-days-video,
+ytd-grid-video-renderer.hide-streamed-days-video {
   display: none !important;
 }

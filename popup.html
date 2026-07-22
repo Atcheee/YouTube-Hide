@@ -10,6 +10,9 @@
     <main class="panel">
       <h1 class="title">YouTube Hide</h1>
       <p class="subtitle">Hide streamed videos, Shorts, and more</p>
+      <p id="refresh-hint" class="refresh-hint" hidden>
+        Reload the extension, then refresh this YouTube tab to apply updates.
+      </p>
       <label class="toggle" for="streamed-toggle">
         <span class="toggle-label">Hide streamed videos</span>
         <input id="streamed-toggle" type="checkbox" checked />
@@ -23,6 +26,11 @@
       <label class="toggle" for="mix-toggle">
         <span class="toggle-label">Hide playlist Mixes</span>
         <input id="mix-toggle" type="checkbox" checked />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="toggle" for="music-toggle">
+        <span class="toggle-label">Hide music videos</span>
+        <input id="music-toggle" type="checkbox" checked />
         <span class="switch" aria-hidden="true"></span>
       </label>
     </main>

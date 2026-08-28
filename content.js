@@ -47,13 +47,18 @@
     return path.endsWith("/streams");
   }
 
+  function isLibraryPage() {
+    const path = location.pathname.replace(/\/+$/, "");
+    return path === "/playlist" || path === "/feed/downloads" || path === "/feed/history";
+  }
+
   function isShortsPage() {
     const path = location.pathname.replace(/\/+$/, "");
     return path === "/shorts" || path.startsWith("/shorts/");
   }
 
   function shouldHideStreamed() {
-    return hideStreamedEnabled && !isStreamsPage();
+    return hideStreamedEnabled && !isStreamsPage() && !isLibraryPage();
   }
 
   function shouldHideShorts() {

@@ -15,6 +15,7 @@ More hide options may be added over time.
 - Handles YouTube's single-page navigation and dynamically loaded video lists.
 - Covers home feeds, search results, channel grids, playlists, and watch-page recommendations.
 - Skips streamed-video hiding on channel **Streams** tabs (`…/streams`).
+- Skips streamed-video hiding in playlists (including Watch Later and Liked videos), Downloads (`/feed/downloads`), and History (`/feed/history`).
 - Skips Shorts hiding on the **Shorts** feed (`/shorts`).
 - Toggle each option from the extension popup; preferences are saved in sync storage.
 - Hides only matching cards/sections; it does not remove or alter videos in your account.

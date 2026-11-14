@@ -189,11 +189,12 @@ for (const site of ["youtube", "crunchyroll"]) {
     assert.match(page.element("site-status").textContent, /Connected/);
     assert.equal(page.element("refresh-hint").hidden, true);
     assert.equal(page.reloads.length, 0);
-    assert.equal(page.injections.length, 2);
-    const target = page.injections[1].js.target;
+    assert.equal(page.injections.length, site === "crunchyroll" ? 3 : 2);
+    const target = page.injections.at(-1).js.target;
     assert.equal(target.tabId, 7);
     assert.equal(target.allFrames, site === "crunchyroll");
-    assert.equal(page.injections[1].js.files[0], "settings.js");
+    assert.equal(page.injections.at(-1).js.files[0], "settings.js");
+    if (site === "crunchyroll") assert.equal(page.injections[0].js.world, "MAIN");
   });
 }
 

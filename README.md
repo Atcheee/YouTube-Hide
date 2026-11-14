@@ -73,6 +73,10 @@ discarded tabs cannot run the content script, and background timers may be delay
   off restores the corresponding native behavior. Typing,
   sliders, menus and modified shortcuts keep their normal behavior. Works in player
   frames, fullscreen and replacement players; seeks stay within the playable range.
+  Seeking uses Crunchyroll's native media-session handlers or its timeline's seek
+  callback, keeping the playback engine and displayed time in sync. It never writes
+  directly to the media element's currentTime or retries play() to repair a stalled
+  seek. If native seeking is unavailable, the original controls remain in charge.
 
 - Replaces the in-player **1x** playback-speed menu with a YouTube-style slider,
   0.05x minus/plus controls, and 1x, 1.25x, 1.5x, 1.75x, 2x, and 3x presets.
@@ -147,6 +151,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
 - `crunchyroll-seek.js`: Optional five-second seek buttons and keyboard shortcuts.
+- `crunchyroll-player-bridge.js`: MAIN-world adapter for native player commands.
 - `background.js`: Relays player-frame skip claims to the watch page's episode memory.
 
 ## Tests

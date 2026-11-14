@@ -30,6 +30,19 @@ async function setup(t, settings = {}) {
   });
   video.getClientRects = () => [{}];
   video.currentTime = 50;
+  // The page owns the seek operation. The extension only sends native commands.
+  Object.defineProperty(window.navigator, "mediaSession", { value: { setActionHandler() {} } });
+  window.eval(readFileSync(join(__dirname, "..", "crunchyroll-player-bridge.js"), "utf8"));
+  const mediaTime = Object.getOwnPropertyDescriptor(window.HTMLMediaElement.prototype, "currentTime");
+  for (const [action, sign] of [["seekbackward", -1], ["seekforward", 1]]) {
+    window.navigator.mediaSession.setActionHandler(action, ({ seekOffset }) => {
+      const min = video.seekable.length ? video.seekable.start(0) : 0;
+      const max = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : video.duration;
+      mediaTime.set.call(video, Math.max(min, Math.min(max, video.currentTime + sign * seekOffset)));
+    });
+  }
+  window.navigator.mediaSession.setActionHandler("play", () => video.play());
+  window.navigator.mediaSession.setActionHandler("pause", () => video.pause());
   const change = installSettings(window, settings);
   let nativeClicks = 0;
   let nativeKeys = 0;
@@ -196,4 +209,75 @@ test("site and master pause also disable J/K/L when five-second seeking is off",
     page.change({ [key]: true });
     assert.equal(page.key("j").defaultPrevented, true);
   }
+});
+
+test("custom seek key releases never reach unmatched native keyup handlers", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  let releases = 0;
+  page.document.addEventListener("keyup", () => releases++);
+  page.key("ArrowLeft");
+  const up = key => page.document.body.dispatchEvent(new page.window.KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }));
+  up("ArrowLeft");
+  assert.equal(releases, 0);
+  up("ArrowRight");
+  assert.equal(releases, 1, "Do not swallow keys the extension did not handle");
+});
+
+test("native engine seeking works without touching raw media time or play(), even when paused=false", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  const time = Object.getOwnPropertyDescriptor(page.window.HTMLMediaElement.prototype, "currentTime");
+  Object.defineProperties(page.video, {
+    paused: { configurable: true, value: false },
+    currentTime: { get: () => time.get.call(page.video), set() { throw new Error("Raw seeking stalls this engine"); } }
+  });
+  page.video.play = () => { throw new Error("play() cannot repair an engine-desynchronized seek"); };
+  page.key("ArrowLeft");
+  assert.equal(page.video.currentTime, 45);
+  assert.equal(page.video.paused, false);
+});
+
+test("missing native seek support leaves the site's keyboard handling untouched", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  page.window.navigator.mediaSession.setActionHandler("seekbackward", null);
+  page.window.navigator.mediaSession.setActionHandler("seekforward", null);
+  assert.equal(page.key("ArrowLeft").defaultPrevented, false);
+  assert.equal(page.video.currentTime, 50);
+});
+
+test("late attachment uses the native React timeline time and seek callback", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  page.window.navigator.mediaSession.setActionHandler("seekbackward", null);
+  page.window.navigator.mediaSession.setActionHandler("seekforward", null);
+  const slider = page.document.createElement("input");
+  slider.type = "range";
+  slider.className = "timeline-slider";
+  slider.min = "0";
+  slider.max = "100";
+  slider.value = "20";
+  let nativePosition;
+  slider.__reactFiber$test = { memoizedProps: {}, return: {
+    memoizedProps: { duration: 100, seekTo: value => { nativePosition = value; slider.value = String(value); } }, return: null
+  } };
+  page.document.getElementById("player-container").appendChild(slider);
+  Object.defineProperty(page.video, "currentTime", { get() { throw new Error("The raw media clock differs from the native timeline"); } });
+  await flush();
+  assert.equal(page.key("ArrowLeft").defaultPrevented, true);
+  assert.equal(nativePosition, 15);
+  page.key("ArrowRight");
+  assert.equal(nativePosition, 20);
+});
+
+test("the MAIN bridge only accepts bounded commands on a video and installs once", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  page.window.eval(readFileSync(join(__dirname, "..", "crunchyroll-player-bridge.js"), "utf8"));
+  let calls = 0;
+  page.window.navigator.mediaSession.setActionHandler("seekbackward", () => calls++);
+  page.key("ArrowLeft");
+  assert.equal(calls, 1);
+  const command = detail => new page.window.CustomEvent("playback-plus-native-command", {
+    bubbles: true, cancelable: true, detail: JSON.stringify(detail)
+  });
+  assert.equal(page.video.dispatchEvent(command({ action: "seekbackward", seconds: 500 })), true);
+  assert.equal(page.document.body.dispatchEvent(command({ action: "seekbackward", seconds: 5 })), true);
+  assert.equal(calls, 1);
 });

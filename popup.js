@@ -146,18 +146,26 @@
       connectionState = "checking";
       renderConnection();
       const registration = chrome.runtime.getManifest().content_scripts.find(entry =>
-        entry.matches.some(pattern => pattern.includes(`${activeSite}.com`)));
+        entry.world !== "MAIN" && entry.matches.some(pattern => pattern.includes(`${activeSite}.com`)));
       if (!registration || !chrome.scripting) { finishConnection(false); return; }
       const target = { tabId: activeTab.id, allFrames: registration.all_frames === true };
       // Restore a missing content-script connection without navigating the tab.
       // Each module guards its installation, preserving state on repeated retries.
-      chrome.scripting.insertCSS({ target, files: registration.css }, () => {
+      const install = () => chrome.scripting.insertCSS({ target, files: registration.css }, () => {
         if (chrome.runtime.lastError) { finishConnection(false); return; }
         chrome.scripting.executeScript({ target, files: registration.js }, () => {
           if (chrome.runtime.lastError) { finishConnection(false); return; }
           ping(finishConnection);
         });
       });
+      const bridge = chrome.runtime.getManifest().content_scripts.find(entry =>
+        entry.world === "MAIN" && entry.matches.some(pattern => pattern.includes(`${activeSite}.com`)));
+      if (bridge) {
+        chrome.scripting.executeScript({ target, files: bridge.js, world: "MAIN" }, () => {
+          if (chrome.runtime.lastError) { finishConnection(false); return; }
+          install();
+        });
+      } else install();
     });
   }
 

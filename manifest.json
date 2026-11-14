@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Playback Plus",
-  "version": "2.0.7",
+  "version": "2.0.9",
   "description": "Player tools for YouTube and Crunchyroll: one-time auto-skip, custom playback speed, and a cleaner YouTube feed.",
   "permissions": [
     "storage",
@@ -57,6 +57,13 @@
       "css": ["crunchyroll.css"],
       "all_frames": true,
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://crunchyroll.com/*", "*://*.crunchyroll.com/*"],
+      "js": ["crunchyroll-player-bridge.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ]
 }

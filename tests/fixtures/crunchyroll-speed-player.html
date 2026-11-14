@@ -6,6 +6,7 @@
         <div data-testid="player-controls-root">
           <button type="button" aria-label="Jump backward 10 seconds"><svg width="24" height="24"></svg></button>
           <button type="button" aria-label="Jump forward 10 seconds"><svg width="24" height="24"></svg></button>
+          <div data-testid="timeline-controls-container"><input type="range" class="timeline-slider" min="0" max="60" value="0" step="0.01" aria-label="Timeline"></div>
           <div data-testid="bottom-right-controls-stack">
             <button type="button" aria-label="Next Episode">Next</button>
             <div class="speed-wrapper"><button aria-label="Playback Speed Menu" type="button"
@@ -17,3 +18,21 @@
     </div>
   </div>
 </div>
+<script>
+// A native timeline callback, mirroring the player's React props contract.
+// The extension must invoke it in MAIN world, never write to the media directly.
+(() => {
+  const video = document.querySelector('video');
+  const slider = document.querySelector('.timeline-slider');
+  const seekTo = position => { video.currentTime = position; slider.value = String(position); };
+  slider.__reactFiber$fixture = { memoizedProps: { duration: 60, seekTo }, return: null };
+  for (const type of ['timeupdate', 'seeked']) video.addEventListener(type, () => { slider.value = String(video.currentTime); });
+  for (const action of ['play', 'pause']) {
+    const button = document.createElement('button');
+    button.setAttribute('aria-label', action === 'play' ? 'Play' : 'Pause');
+    button.textContent = action;
+    button.addEventListener('click', () => { if (action === 'play') video.play(); else video.pause(); });
+    document.getElementById('player-container').appendChild(button);
+  }
+})();
+</script>

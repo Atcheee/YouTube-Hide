@@ -8,6 +8,7 @@
   const CLASS = "playback-plus-five-second-seek";
   const BADGE = "playback-plus-seek-icon";
   const originals = new Map();
+  const handledKeys = new Set();
   let enabled = false;
   let fiveSecondSeek = false;
   let keyboardShortcuts = false;
@@ -42,12 +43,12 @@
     queued = false;
     if (settingsContext.isActive?.() === false) return;
     for (const [button, record] of originals) {
-      if (!active() || !fiveSecondSeek || !button.isConnected || !direction(button)) restore(button, record);
+      if (!active() || !fiveSecondSeek || !button.isConnected || !direction(button) || !nativeCommand(findVideo(button), "probe")) restore(button, record);
     }
     if (!active() || !fiveSecondSeek) return;
     for (const button of document.querySelectorAll(BUTTONS)) {
       const sign = direction(button);
-      if (!sign || !findVideo(button)) continue;
+      if (!sign || !nativeCommand(findVideo(button), "probe")) continue;
       let record = originals.get(button);
       if (!record) {
         record = { original: {}, applied: {} };
@@ -86,16 +87,15 @@
     return visible.find(video => !video.paused && !video.ended) || (visible.length === 1 ? visible[0] : null);
   }
 
+  function nativeCommand(video, action, seconds) {
+    if (!video || video.readyState < 1) return false;
+    return !video.dispatchEvent(new CustomEvent("playback-plus-native-command", {
+      bubbles: true, cancelable: true, detail: JSON.stringify({ action, seconds })
+    }));
+  }
+
   function seek(video, sign, seconds = 5) {
-    if (!video || video.readyState < 1 || !Number.isFinite(video.currentTime)) return false;
-    const requested = video.currentTime + sign * seconds;
-    const ranges = [];
-    for (let i = 0; i < video.seekable.length; i++) ranges.push([video.seekable.start(i), video.seekable.end(i)]);
-    if (!ranges.length && Number.isFinite(video.duration) && video.duration > 0) ranges.push([0, video.duration]);
-    if (!ranges.length) return false;
-    const positions = ranges.map(([start, end]) => Math.max(start, Math.min(end, requested)));
-    const position = positions.reduce((best, next) => Math.abs(next - requested) < Math.abs(best - requested) ? next : best);
-    try { video.currentTime = position; return true; } catch { return false; }
+    return nativeCommand(video, sign < 0 ? "seekbackward" : "seekforward", seconds);
   }
 
   function consume(event) {
@@ -129,18 +129,26 @@
       if (control && !direction(control) && event.key.startsWith("Arrow")) return;
       if (target !== document.body && target !== document.documentElement && !target.closest(PLAYER)) return;
       const video = findVideo(target);
-      if ((event.key === "k" || event.key === "K") && video?.readyState >= 1) {
-        try {
-          if (video.paused || video.ended) video.play()?.catch(() => {});
-          else video.pause();
+      if (event.key.toLowerCase() === "k") {
+        if (nativeCommand(video, "toggle")) {
           consume(event);
-        } catch { /* Leave the native shortcut available if the player rejects it. */ }
+          handledKeys.add(event.code || event.key);
+        }
         return;
       }
       const sign = { ArrowLeft: -1, ArrowRight: 1, j: -1, J: -1, l: 1, L: 1 }[event.key];
       const seconds = event.key.startsWith("Arrow") ? 5 : 10;
-      if (sign && seek(video, sign, seconds)) consume(event);
+      if (sign && seek(video, sign, seconds)) {
+        consume(event);
+        handledKeys.add(event.code || event.key);
+      }
     }, true);
+    // Native keyup handlers must not see an unmatched key release after we
+    // replaced keydown; that can leave the player's seek/pause state stuck.
+    window.addEventListener("keyup", event => {
+      if (handledKeys.delete(event.code || event.key)) consume(event);
+    }, true);
+    window.addEventListener("blur", () => handledKeys.clear());
     for (const event of ["loadedmetadata", "playing"]) document.addEventListener(event, schedule, true);
   }
 

@@ -121,6 +121,41 @@ const assert = require("node:assert/strict");
     await page.keyboard.press("k");
     await frame.waitForFunction(() => document.querySelector("video").paused);
     assert.equal(await frame.evaluate(() => nativeSeeks), 0);
+    // Reject direct media writes in the extension's isolated world. The native
+    // MAIN-world timeline must still seek while the playing clock advances.
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: "https://www.crunchyroll.com/*" });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: () => {
+        const video = document.querySelector("video");
+        if (!video) return;
+        const time = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
+        Object.defineProperty(video, "currentTime", {
+          get: () => time.get.call(video),
+          set: () => { throw new Error("Raw media seeking would desynchronize this engine"); }
+        });
+      } });
+    });
+    await frame.evaluate(async () => {
+      const video = document.querySelector("video");
+      video.currentTime = 45;
+      await new Promise(resolve => video.addEventListener("seeked", resolve, { once: true }));
+    });
+    await page.keyboard.press("k");
+    await frame.waitForFunction(() => !document.querySelector("video").paused);
+    for (const key of ["ArrowLeft", "ArrowLeft", "j", "ArrowRight", "l"]) {
+      await page.keyboard.press(key);
+      await frame.waitForFunction(() => {
+        const video = document.querySelector("video");
+        return !video.paused && !video.seeking;
+      });
+      const position = await frame.locator("video").evaluate(video => video.currentTime);
+      await frame.waitForFunction(position => document.querySelector("video").currentTime > position + .25, position);
+    }
+    await page.keyboard.press("k");
+    await frame.waitForFunction(() => document.querySelector("video").paused);
+    await page.keyboard.press("ArrowLeft");
+    await frame.waitForFunction(() => !document.querySelector("video").seeking);
+    assert.equal(await frame.locator("video").evaluate(video => video.paused), true, "Paused playback must remain paused after seeking");
     await crunchyrollPopup.locator('label:has(input[data-setting="crunchyrollFiveSecondSeekEnabled"])').click();
     await frame.getByRole("button", { name: "Jump forward 10 seconds", exact: true }).waitFor();
     await frame.evaluate(() => { document.querySelector("video").currentTime = 30; });
@@ -134,8 +169,45 @@ const assert = require("node:assert/strict");
     await frame.evaluate(() => document.activeElement.blur());
     await page.keyboard.press("l");
     assert.equal(await frame.locator("video").evaluate(video => video.currentTime), 30, "Disabling J/K/L must release the extension shortcut");
+    // Generate a moving video locally, then verify decoded frames continue after
+    // rewind. paused=false and a changing UI clock alone cannot prove playback.
+    await page.bringToFront();
+    await frame.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 160; canvas.height = 90;
+      const paint = canvas.getContext("2d");
+      const stream = canvas.captureStream(10);
+      const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });
+      const chunks = [];
+      recorder.ondataavailable = event => chunks.push(event.data);
+      const stopped = new Promise(resolve => { recorder.onstop = resolve; });
+      let tick = 0;
+      const draw = () => {
+        paint.fillStyle = "#222"; paint.fillRect(0, 0, 160, 90);
+        paint.fillStyle = "#fc3"; paint.fillRect((tick++ * 5) % 140, 10, 20, 70);
+      };
+      draw(); recorder.start();
+      const timer = setInterval(draw, 100);
+      await new Promise(resolve => setTimeout(resolve, 6500));
+      recorder.stop(); await stopped; clearInterval(timer);
+      stream.getTracks().forEach(track => track.stop());
+      document.querySelector("video").src = URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
+    });
+    await frame.waitForFunction(() => document.querySelector("video").readyState >= 2);
+    await frame.evaluate(async () => {
+      const video = document.querySelector("video");
+      video.currentTime = 5.5;
+      await new Promise(resolve => video.addEventListener("seeked", resolve, { once: true }));
+    });
+    await crunchyrollPopup.locator('label:has(input[data-setting="crunchyrollFiveSecondSeekEnabled"])').click();
+    await frame.getByRole("button", { name: "Play", exact: true }).click();
+    await frame.evaluate(() => document.activeElement.blur());
+    await page.keyboard.press("ArrowLeft");
+    await frame.waitForFunction(() => !document.querySelector("video").seeking && !document.querySelector("video").paused);
+    const frames = await frame.locator("video").evaluate(video => video.getVideoPlaybackQuality().totalVideoFrames);
+    await frame.waitForFunction(before => document.querySelector("video").getVideoPlaybackQuality().totalVideoFrames >= before + 3, frames);
     assert.equal(navigations, 2);
     await crunchyrollPopup.close();
-    console.log("Passed: cold-tab recovery, live settings, popup reopen, idempotent injection, one-time skip, Crunchyroll frame recovery, 5s buttons/arrows, 10s J/L, K pause/play, native seek restoration, no page reloads.");
+    console.log("Passed: cold-tab recovery, live settings, popup reopen, idempotent injection, one-time skip, Crunchyroll frame recovery, 5s buttons/arrows, 10s J/L, K pause/play, continued playback with raw media writes forbidden, decoded video frames advance after rewind, paused seeks stay paused, native seek restoration, no page reloads.");
   } finally { await context.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

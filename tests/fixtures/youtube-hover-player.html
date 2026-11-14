@@ -3,6 +3,8 @@
   body { margin: 0; background: #111; color: white; font-family: Arial; }
   #movie_player { position: relative; margin: 40px; width: 960px; height: 540px; background: #303840; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #movie_player, #movie_player video { cursor: default; }
+  #movie_player.ytp-autohide, #movie_player.ytp-autohide video { cursor: none; }
   .ytp-chrome-top { position: absolute; top: 0; width: 100%; opacity: 0; }
   .ytp-chrome-bottom { position: absolute; bottom: 0; width: 100%; height: 64px; opacity: 0; }
   .ytp-progress-bar-container { position: absolute; left: 12px; right: 12px; top: 0; height: 12px; }

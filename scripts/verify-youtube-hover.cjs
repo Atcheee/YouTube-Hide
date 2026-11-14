@@ -14,12 +14,12 @@ function silentWave() {
   return `data:audio/wav;base64,${data.toString("base64")}`;
 }
 
-async function sampleUnattendedFrames(page) {
-  return page.evaluate(async () => {
+async function sampleUnattendedFrames(page, simulateBlur = true) {
+  return page.evaluate(async (simulateBlur) => {
     const frames = [];
     const initialHovers = hoverFixture.hovers;
     const end = performance.now() + 3300;
-    window.dispatchEvent(new Event('blur'));
+    if (simulateBlur) window.dispatchEvent(new Event('blur'));
     while (performance.now() < end) {
       await new Promise(requestAnimationFrame);
       const player = document.getElementById('movie_player');
@@ -27,18 +27,20 @@ async function sampleUnattendedFrames(page) {
       frames.push({
         watermarkBottom: player.getBoundingClientRect().bottom - watermark.bottom,
         titleOpacity: getComputedStyle(player.querySelector('.ytp-fullscreen-metadata')).opacity,
-        barOpacity: getComputedStyle(player.querySelector('.ytp-chrome-bottom')).opacity
+        barOpacity: getComputedStyle(player.querySelector('.ytp-chrome-bottom')).opacity,
+        cursor: getComputedStyle(document.elementFromPoint(500, 200) || player).cursor
       });
     }
     return { frames: frames.length, offsets: [...new Set(frames.map(frame => Math.round(frame.watermarkBottom * 10) / 10))],
       titleFlashed: frames.some(frame => frame.titleOpacity !== '0'),
       barFlashed: frames.some(frame => frame.barOpacity !== '0'), checks: hoverFixture.hovers - initialHovers,
+      cursors: [...new Set(frames.map(frame => frame.cursor))],
       fullscreen: document.fullscreenElement === document.getElementById('movie_player'),
       fullscreenLayout: document.getElementById('movie_player').classList.contains('ytp-fullscreen'),
       fillsViewport: document.getElementById('movie_player').getBoundingClientRect().width === innerWidth &&
         document.getElementById('movie_player').getBoundingClientRect().height === innerHeight,
       visible: !document.hidden, focused: document.hasFocus() };
-  });
+  }, simulateBlur);
 }
 
 (async () => {
@@ -81,6 +83,16 @@ async function sampleUnattendedFrames(page) {
     assert.equal(afterReturn.visible, false, "Returning to the video must not reveal a stale timeline thumbnail");
     assert.equal(afterReturn.nativeHover, "false", "Returning off the timeline must complete artificial leave events");
     assert.equal(await page.locator(".ytp-fullscreen-quick-actions").evaluate((row) => getComputedStyle(row).opacity), "1");
+    // Leave the real pointer on the video. The idle timeout must hide it once,
+    // and repeated automatic checks must not bring it back for a painted frame.
+    await page.waitForFunction(() => document.getElementById('movie_player').classList.contains('youtube-hide-auto-activity'));
+    const parkedCursor = await sampleUnattendedFrames(page, false);
+    assert.ok(parkedCursor.checks >= 2);
+    assert.deepEqual(parkedCursor.cursors, ['none'], 'A parked cursor must stay hidden across automatic hover checks');
+    await page.mouse.move(501, 200);
+    assert.notEqual(await page.locator('video').evaluate(video => getComputedStyle(video).cursor), 'none',
+      'Real mouse movement must immediately restore the cursor');
+    console.log(JSON.stringify({ parkedCursor }));
     await page.evaluate(() => {
       window.dispatchEvent(new Event("blur"));
       window.dispatchEvent(new Event("focus"));

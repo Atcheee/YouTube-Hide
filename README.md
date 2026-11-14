@@ -52,7 +52,9 @@ and gradients, including the fullscreen Like/Dislike/Comments/Share row, so they
 Checks close both timeline and full player hover when unattended. They never call native
 `hideControls()`/`showControls()`: toggling those APIs changes the fullscreen overlay layout.
 Quiet CSS includes the separate modern fullscreen title, collapses hidden quick-action
-rows, and holds the overlay stack at YouTube's native idle offset of 24px. This keeps the
+rows, and keeps a parked cursor hidden across automatic hover checks. Real mouse
+movement restores the cursor immediately. It also holds the overlay stack at YouTube's
+native idle offset of 24px. This keeps the
 channel watermark from moving during checks. Real movement, button presses, keyboard,
 clicks, and wheel input remove suppression. Layout-generated over/enter events do not. Video-surface pointer
 interaction expires after three idle seconds; intentional control-bar hover and held

@@ -71,6 +71,13 @@ ytd-grid-video-renderer.hide-streamed-days-video {
   display: none !important;
 }
 
+/* Automatic hover checks wake YouTube's cursor as well as its controls.
+   Real input removes this class before native handlers process the movement. */
+#movie_player.youtube-hide-auto-activity,
+#movie_player.youtube-hide-auto-activity * {
+  cursor: none !important;
+}
+
 #movie_player.youtube-hide-auto-activity .ytp-chrome-bottom,
 #movie_player.youtube-hide-auto-activity .ytp-chrome-top,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-bottom,

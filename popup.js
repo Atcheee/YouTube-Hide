@@ -57,7 +57,7 @@
         return;
       }
 
-      if (!response?.features?.includes("music")) showRefreshHint();
+      if (!response?.features?.includes("jump-ahead")) showRefreshHint();
     });
   });
 })();

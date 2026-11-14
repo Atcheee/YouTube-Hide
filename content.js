@@ -386,7 +386,7 @@
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type === "youtube-hide-ping") {
-        sendResponse({ ok: true, features: ["streamed", "shorts", "mix", "music"] });
+        sendResponse({ ok: true, features: ["streamed", "shorts", "mix", "music", "jump-ahead"] });
         return true;
       }
       return false;

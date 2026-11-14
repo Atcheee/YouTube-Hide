@@ -6,3 +6,19 @@ ytd-compact-video-renderer.hide-streamed-days-video,
 ytd-grid-video-renderer.hide-streamed-days-video {
   display: none !important;
 }
+
+#movie_player .youtube-hide-jump-notice {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 99999;
+  pointer-events: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font: 600 18px/1.4 Roboto, Arial, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+}

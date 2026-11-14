@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Hide",
-  "version": "1.5.0",
-  "description": "Hide streamed videos, Shorts, Mixes, music videos, and other clutter on YouTube.",
+  "version": "1.6.0",
+  "description": "Hide streamed videos, Shorts, Mixes, and music videos; automatically click Jump ahead once per video.",
   "permissions": [
     "storage",
     "activeTab"
@@ -18,7 +18,8 @@
         "*://*.youtube.com/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "jump-ahead.js"
       ],
       "css": [
         "styles.css"

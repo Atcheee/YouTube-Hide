@@ -25,6 +25,11 @@ discarded tabs cannot run the content script, and background timers may be delay
 
 ## Crunchyroll
 
+- Replaces the in-player **1x** playback-speed menu with a YouTube-style slider,
+  0.05x minus/plus controls, and 1x, 1.25x, 1.5x, 1.75x, 2x, and 3x presets.
+  Speeds range from 0.25x to 4x. Controls change the actual media playback rate;
+  selection is saved locally and restored for subsequent episodes and player reloads.
+  The picker supports keyboard controls, fullscreen, and dynamic player replacement.
 - Automatically clicks **Skip Intro** on `crunchyroll.com`, including inside player
   frames. Matches the button's exact label, text, and `skip-intro-icon` marker.
 - Works with the supplied unhovered state (`aria-hidden="true"`, opacity zero,
@@ -81,9 +86,14 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
+- `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
 - `background.js`: Relays player-frame skip claims to the watch page's episode memory.
 
 ## Tests
 
 Run `npm ci`, then `npm test`. Tests exercise the content script against a DOM fixture
 matching YouTube's Jump ahead overlay, including rewinds and single-page navigation.
+`npm run test:browser` loads the actual extension in an isolated headless Brave/Chromium
+profile, checks the speed picker's real media playback timing, and verifies settings survive
+a page reload. It uses a local player fixture, not a signed-in Crunchyroll session. Set
+`CRUNCHYROLL_TEST_BROWSER` if your browser executable is not found automatically.

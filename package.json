@@ -2,9 +2,11 @@
   "name": "youtube-hide",
   "private": true,
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:browser": "node scripts/verify-crunchyroll-speed.cjs"
   },
   "devDependencies": {
-    "jsdom": "^27.2.0"
+    "jsdom": "^27.2.0",
+    "playwright-core": "^1.65.1"
   }
 }

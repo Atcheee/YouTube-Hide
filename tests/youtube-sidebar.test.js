@@ -31,13 +31,15 @@ async function setup(t, html = sidebar(true) + sidebar(false), settings = {}) {
   return { window: dom.window, document: dom.window.document, change };
 }
 
-test("compact and expanded sidebars hide Shorts and put one Watch later link between Subscriptions and You", async t => {
+test("compact and expanded sidebars hide Shorts and put Watch later directly before Subscriptions", async t => {
   const { document } = await setup(t);
   for (const root of document.querySelectorAll("ytd-mini-guide-renderer, ytd-guide-renderer")) {
     assert.equal(root.querySelector("[data-shorts]").classList.contains(hidden), true);
-    const link = root.querySelector("[data-subscriptions]").nextElementSibling;
+    const subscription = root.querySelector("[data-subscriptions]");
+    const link = subscription.previousElementSibling;
     assert.equal(link.matches(shortcut), true);
-    assert.equal(link.nextElementSibling.hasAttribute("data-you"), true);
+    assert.equal(link.nextElementSibling, subscription);
+    assert.equal(subscription.nextElementSibling.hasAttribute("data-you"), true);
     assert.equal(link.getAttribute("href"), "/playlist?list=WL");
     assert.equal(link.getAttribute("aria-label"), "Watch later");
     assert.equal(link.classList.contains("playback-plus-watch-later-compact"), root.matches("ytd-mini-guide-renderer"));

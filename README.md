@@ -32,8 +32,8 @@ Automatically hides the following when their filters are enabled:
 - Music videos (thumbnail duration badge with the music-note icon, including lockup cards)
 
 The **Hide Shorts** setting also hides the sidebar's Shorts entry. In compact and
-expanded sidebars, **Watch later** appears directly after **Subscriptions**, before
-**You**, and its original entry in the You menu is hidden. Pausing the extension or
+expanded sidebars, **Watch later** appears directly above **Subscriptions**, followed
+by **You**, and its original entry in the You menu is hidden. Pausing the extension or
 YouTube tools restores the original sidebar.
 Toggle **Watch later in sidebar** in the popup to restore Watch later to the You
 menu independently of Shorts filtering. Both preferences apply to open tabs.

@@ -64,7 +64,7 @@
         continue;
       }
       if (!shortcut) shortcut = createShortcut(root.matches("ytd-mini-guide-renderer"), label);
-      if (entry.nextElementSibling !== shortcut) entry.after(shortcut);
+      if (entry.previousElementSibling !== shortcut) entry.before(shortcut);
       if (shortcut.title !== label) {
         shortcut.title = label;
         shortcut.setAttribute("aria-label", label);

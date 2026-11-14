@@ -12,6 +12,13 @@ More hide options may be added over time.
 Also automatically clicks the player's visible **Jump ahead** button once per video.
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
+Playback events and a one-second fallback check work without animation frames or tab
+focus. During playback, the extension sends simulated player and timeline hover events
+to reveal hover-driven actions, without moving your cursor or switching tabs. Timeline
+hover targets the current playback position; it never clicks/drags the timeline or seeks
+the video itself. It stops doing this once that video has been skipped.
+YouTube must accept the simulated event and expose the button; browser-frozen or
+discarded tabs cannot run the content script, and background timers may be delayed.
 
 ## Behavior
 

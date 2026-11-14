@@ -27,11 +27,16 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
     observers.forEach((observer) => observer.disconnect());
     window.close();
   });
-  const frames = [];
+  const pollers = [];
   let clicks = 0;
   // jsdom has no layout. Supply a box; CSS and hidden-ancestor checks remain real.
   window.Element.prototype.getClientRects = () => [{ width: 140, height: 40 }];
-  window.requestAnimationFrame = (callback) => { frames.push(callback); return frames.length; };
+  window.requestAnimationFrame = () => { throw new Error("Animation frames unavailable in background tab"); };
+  window.setInterval = (callback, delay) => {
+    assert.equal(delay, 1000);
+    pollers.push(callback);
+    return pollers.length;
+  };
   document.addEventListener("click", () => { clicks += 1; });
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
@@ -43,10 +48,9 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
     get button() { return document.querySelector("button"); },
     get player() { return document.getElementById("movie_player"); },
     async flush() {
-      await Promise.resolve();
-      frames.splice(0).forEach((callback) => callback());
-      await Promise.resolve();
+      await new Promise(setImmediate);
     },
+    poll() { pollers.forEach((callback) => callback()); },
     event(name, target = document) { target.dispatchEvent(new window.Event(name)); },
     navigate(url) {
       this.event("yt-navigate-start");
@@ -201,4 +205,205 @@ test("does not click a watch-page control without a video ID", async (t) => {
   const page = setup(t, overlay, "https://www.youtube.com/");
   await page.flush();
   assert.equal(page.clicks, 0);
+});
+
+function setPlaying(page) {
+  const video = page.player.querySelector("video");
+  Object.defineProperties(video, {
+    paused: { value: false, configurable: true },
+    readyState: { value: 4, configurable: true }
+  });
+  return video;
+}
+
+test("reveals a hover-created prompt in a background tab without focus or animation frames", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  Object.defineProperty(page.document, "hidden", { value: true });
+  t.mock.method(page.window, "focus", () => assert.fail("Must not focus the tab"));
+  let movements = 0;
+  page.player.addEventListener("mousemove", (event) => {
+    assert.equal(event.target, video);
+    assert.equal(event.isTrusted, false);
+    movements += 1;
+    page.player.insertAdjacentHTML("beforeend", overlay);
+  });
+  await page.flush();
+  assert.equal(movements, 1);
+  assert.equal(page.clicks, 1);
+  page.player.querySelector(".ytp-overlay-inline-container").remove();
+  page.player.insertAdjacentHTML("beforeend", overlay);
+  page.event("seeked", video);
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 1);
+  assert.equal(page.clicks, 1);
+});
+
+test("reveals faded player actions in a visible but unfocused window", async (t) => {
+  const page = setup(t);
+  setPlaying(page);
+  Object.defineProperty(page.document, "hidden", { value: false });
+  t.mock.method(page.document, "hasFocus", () => false);
+  const actions = page.player.querySelector(".ytp-timely-actions-overlay");
+  actions.style.opacity = "0";
+  page.player.addEventListener("mousemove", () => { actions.style.opacity = "1"; });
+  await page.flush();
+  assert.equal(page.clicks, 1);
+});
+
+test("fallback polling detects availability without DOM, playback or animation-frame events", async (t) => {
+  const page = setup(t);
+  let hasBox = false;
+  page.button.getClientRects = () => hasBox ? [{ width: 140, height: 40 }] : [];
+  await page.flush();
+  assert.equal(page.clicks, 0);
+  hasBox = true;
+  page.poll();
+  await page.flush();
+  assert.equal(page.clicks, 1);
+});
+
+test("unattended playback checks are limited to one simulated movement per second", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  await page.flush();
+  assert.equal(movements, 1);
+  page.event("timeupdate", video);
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 1);
+  now += 1000;
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 2);
+  assert.equal(page.clicks, 0);
+});
+
+test("focused playback also requests hover actions when the cursor is away from the timeline", async (t) => {
+  const page = setup(t, "");
+  setPlaying(page);
+  Object.defineProperty(page.document, "hidden", { value: false });
+  t.mock.method(page.document, "hasFocus", () => true);
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  await page.flush();
+  assert.equal(movements, 1);
+});
+
+test("does not click hidden actions if YouTube ignores simulated movement", async (t) => {
+  const page = setup(t);
+  setPlaying(page);
+  page.button.style.opacity = "0";
+  await page.flush();
+  page.poll();
+  await page.flush();
+  assert.equal(page.clicks, 0);
+  assert.equal(page.player.querySelector(".youtube-hide-jump-notice"), null);
+});
+
+test("paused video does not receive simulated movement", async (t) => {
+  const page = setup(t, "");
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  await page.flush();
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 0);
+});
+
+function addTimeline(page, duration = 600, currentTime = 120) {
+  const video = setPlaying(page);
+  Object.defineProperty(video, "duration", { value: duration });
+  video.currentTime = currentTime;
+  page.player.insertAdjacentHTML("beforeend",
+    '<div class="ytp-progress-bar-container"><div class="ytp-progress-bar" role="slider"></div></div>');
+  const timeline = page.player.querySelector(".ytp-progress-bar");
+  timeline.getBoundingClientRect = () => ({ left: 100, top: 400, width: 800, height: 6 });
+  return { video, timeline, container: timeline.parentElement };
+}
+
+test("timeline-only hover reveals the prompt at the playhead without clicks, dragging or seeking", async (t) => {
+  const page = setup(t, "");
+  const { video, timeline, container } = addTimeline(page);
+  Object.defineProperty(page.document, "hidden", { value: false });
+  t.mock.method(page.document, "hasFocus", () => true);
+  t.mock.method(page.window, "focus", () => assert.fail("Must not focus the tab"));
+  let entered = false;
+  let timelineMoves = 0;
+  container.addEventListener("mouseenter", () => { entered = true; });
+  for (const type of ["mousedown", "mouseup", "pointerdown", "pointerup", "click"]) {
+    timeline.addEventListener(type, () => assert.fail(`Hover must not dispatch ${type}`));
+  }
+  timeline.addEventListener("mousemove", (event) => {
+    timelineMoves += 1;
+    assert.equal(entered, true);
+    assert.equal(event.clientX, 260);
+    assert.equal(event.clientY, 403);
+    assert.equal(event.buttons, 0);
+    page.window.queueMicrotask(() => page.player.insertAdjacentHTML("beforeend", overlay));
+  });
+  await page.flush();
+  assert.equal(timelineMoves, 1);
+  assert.equal(page.clicks, 1);
+  assert.equal(video.currentTime, 120);
+  assert.equal(page.player.querySelector(".youtube-hide-jump-notice").textContent, "Jumped ahead");
+  video.currentTime = 110;
+  page.event("seeked", video);
+  page.poll();
+  await page.flush();
+  assert.equal(timelineMoves, 1);
+  assert.equal(page.clicks, 1);
+});
+
+test("timeline pointer listeners receive mouse pointer hover when PointerEvent is supported", async (t) => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  // jsdom lacks PointerEvent; emulate the browser constructor for this path.
+  page.window.PointerEvent = class extends page.window.MouseEvent {
+    constructor(type, options) {
+      super(type, options);
+      this.pointerType = options.pointerType;
+    }
+  };
+  let entered = false;
+  timeline.addEventListener("pointerenter", () => { entered = true; });
+  timeline.addEventListener("pointermove", (event) => {
+    assert.equal(entered, true);
+    assert.equal(event.pointerType, "mouse");
+    page.player.insertAdjacentHTML("beforeend", overlay);
+  });
+  await page.flush();
+  assert.equal(page.clicks, 1);
+});
+
+test("timeline hover stays inside its edges at the start and end of a video", async (t) => {
+  for (const [time, expectedX] of [[0, 101], [600, 899]]) {
+    const page = setup(t, "");
+    const { timeline } = addTimeline(page, 600, time);
+    const positions = [];
+    timeline.addEventListener("mousemove", (event) => positions.push(event.clientX));
+    await page.flush();
+    assert.deepEqual(positions, [expectedX]);
+    assert.equal(page.clicks, 0);
+  }
+});
+
+test("does not invent timeline positions for live streams or a timeline with no layout", async (t) => {
+  for (const duration of [Infinity, NaN, 600]) {
+    const page = setup(t, "");
+    const { timeline } = addTimeline(page, duration);
+    if (duration === 600) {
+      timeline.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0 });
+    }
+    let movements = 0;
+    timeline.addEventListener("mousemove", () => { movements += 1; });
+    await page.flush();
+    assert.equal(movements, 0);
+    assert.equal(page.clicks, 0);
+  }
 });

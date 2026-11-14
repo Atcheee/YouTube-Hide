@@ -6,6 +6,7 @@
     youtubeEnabled: true,
     crunchyrollEnabled: true,
     youtubeAutoJumpEnabled: true,
+    youtubeWatchLaterShortcutEnabled: true,
     crunchyrollAutoSkipEnabled: true,
     crunchyrollSpeedEnabled: true,
     showSkipNotice: true,

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Playback Plus",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Player tools for YouTube and Crunchyroll: one-time auto-skip, custom playback speed, and a cleaner YouTube feed.",
   "permissions": [
     "storage",
@@ -35,6 +35,7 @@
       "js": [
         "settings.js",
         "content.js",
+        "youtube-sidebar.js",
         "jump-ahead.js"
       ],
       "css": [

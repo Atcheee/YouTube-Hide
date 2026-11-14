@@ -29,6 +29,13 @@ Automatically hides the following when their filters are enabled:
 - Playlist Mix cards (e.g. "My Mix" with the Mix badge / radio playlist links)
 - Music videos (thumbnail duration badge with the music-note icon, including lockup cards)
 
+The **Hide Shorts** setting also hides the sidebar's Shorts entry. In compact and
+expanded sidebars, **Watch later** appears directly after **Subscriptions**, before
+**You**, and its original entry in the You menu is hidden. Pausing the extension or
+YouTube tools restores the original sidebar.
+Toggle **Watch later in sidebar** in the popup to restore Watch later to the You
+menu independently of Shorts filtering. Both preferences apply to open tabs.
+
 Also automatically clicks the player's visible **Jump ahead** button once per video.
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
@@ -123,6 +130,7 @@ discarded tabs cannot run the content script, and background timers may be delay
   Run `npm run build:icons` to regenerate PNG sizes from the SVG source.
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
+- `youtube-sidebar.js`: Sidebar Shorts filtering and the Watch later shortcut.
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.

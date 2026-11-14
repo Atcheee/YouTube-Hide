@@ -48,6 +48,7 @@ legend, .group-label { margin: 0; padding: 0; font-size: 10px; color: var(--mute
 .toggle strong { display: block; font-size: 12px; font-weight: 550; }
 .toggle small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
 .toggle.compact { padding: 5px 0; font-size: 12px; }
+#youtube-options .toggle.compact { padding: 3px 0; }
 .site-enable { border-bottom: 1px solid var(--line); padding-top: 1px; padding-bottom: 10px; }
 .toggle input, .master-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .switch { position: relative; display: inline-block; width: 34px; height: 20px; border-radius: 999px; background: var(--track); flex-shrink: 0; transition: background .15s; vertical-align: middle; }

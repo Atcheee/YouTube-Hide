@@ -152,3 +152,21 @@ test("site tabs support arrow-key navigation and expose only the selected panel"
   assert.equal(page.document.activeElement, page.element("crunchyroll-tab"));
   assert.equal(page.element("youtube-panel").hidden, true);
 });
+
+test("Watch later sidebar switch saves independently, respects site pause, and resets to default", t => {
+  const page = setup(t, { sync: { youtubeWatchLaterShortcutEnabled: false, hideShortsEnabled: false } });
+  const toggle = page.input("youtubeWatchLaterShortcutEnabled");
+  assert.equal(toggle.checked, false);
+  toggle.click();
+  assert.equal(page.values.sync.youtubeWatchLaterShortcutEnabled, true);
+  assert.equal(page.input("hideShortsEnabled").checked, false);
+  page.input("youtubeEnabled").click();
+  assert.equal(toggle.matches(":disabled"), true);
+  assert.equal(toggle.checked, true);
+  page.input("youtubeEnabled").click();
+  toggle.click();
+  assert.equal(page.values.sync.youtubeWatchLaterShortcutEnabled, false);
+  page.element("reset-settings").click();
+  assert.equal(toggle.checked, true);
+  assert.equal(page.values.sync.youtubeWatchLaterShortcutEnabled, true);
+});

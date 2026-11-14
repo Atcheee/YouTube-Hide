@@ -79,6 +79,9 @@ discarded tabs cannot run the content script, and background timers may be delay
   callback, keeping the playback engine and displayed time in sync. It never writes
   directly to the media element's currentTime or retries play() to repair a stalled
   seek. If native seeking is unavailable, the original controls remain in charge.
+  Keyboard interception starts before the site's native shortcuts, so the first
+  arrow press uses five seconds even when Play or the timeline has focus. Volume,
+  playback-speed sliders, menus, text entry and modified shortcuts stay native.
 
 - Replaces the in-player **1x** playback-speed menu with a YouTube-style slider,
   0.05x minus/plus controls, and 1x, 1.25x, 1.5x, 1.75x, 2x, and 3x presets.
@@ -176,3 +179,5 @@ in isolated Brave/Chromium. Set `PLAYBACK_TEST_BROWSER` to override browser disc
 popup opens, live settings, one-time skip memory, and cross-origin Crunchyroll frames
 without reloading the page. It uses a temporary extension copy with automatic script
 loading disabled to model tabs that were open before installation.
+`npm run test:keys` checks the first arrow press and held-key repeats against an
+early native ten-second shortcut, including focus on Play and the timeline.

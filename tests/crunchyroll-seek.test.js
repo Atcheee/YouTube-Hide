@@ -7,7 +7,7 @@ const installSettings = require("../test-support/settings.cjs");
 const script = readFileSync(join(__dirname, "..", "crunchyroll-seek.js"), "utf8");
 const flush = () => new Promise(setImmediate);
 
-async function setup(t, settings = {}) {
+async function setup(t, settings = {}, { earlyNative = false } = {}) {
   const dom = new JSDOM(`<div id="player-container"><video></video>
     <button aria-label="Jump backward 10 seconds"><svg></svg></button>
     <button aria-label="Jump forward 10 seconds" title="Forward"><svg></svg></button>
@@ -46,6 +46,12 @@ async function setup(t, settings = {}) {
   const change = installSettings(window, settings);
   let nativeClicks = 0;
   let nativeKeys = 0;
+  if (earlyNative) window.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    nativeKeys++;
+    video.currentTime += event.key === "ArrowLeft" ? -10 : 10;
+    event.preventDefault();
+  }, true);
   const [back, forward, intro] = document.querySelectorAll("button");
   for (const [button, sign] of [[back, -1], [forward, 1]]) button.addEventListener("click", () => {
     nativeClicks++;
@@ -118,7 +124,7 @@ test("arrows seek five seconds, J/L seek ten and editing, sliders and modified s
   assert.equal(page.nativeKeys, 0);
   page.key("j", page.back);
   assert.equal(page.video.currentTime, 40, "J must still work after clicking a seek button");
-  for (const selector of ["#search", "#editor", '[type="range"]', '[role="dialog"]', 'button[aria-label="Skip Intro"]']) {
+  for (const selector of ["#search", "#editor", '[type="range"]', '[role="dialog"]']) {
     assert.equal(page.key("ArrowRight", page.document.querySelector(selector)).defaultPrevented, false);
   }
   assert.equal(page.key("ArrowRight", page.document.body, { ctrlKey: true }).defaultPrevented, false);
@@ -274,10 +280,30 @@ test("the MAIN bridge only accepts bounded commands on a video and installs once
   page.window.navigator.mediaSession.setActionHandler("seekbackward", () => calls++);
   page.key("ArrowLeft");
   assert.equal(calls, 1);
-  const command = detail => new page.window.CustomEvent("playback-plus-native-command", {
+  const command = detail => new page.window.CustomEvent("playback-plus-native-command-v2", {
     bubbles: true, cancelable: true, detail: JSON.stringify(detail)
   });
   assert.equal(page.video.dispatchEvent(command({ action: "seekbackward", seconds: 500 })), true);
   assert.equal(page.document.body.dispatchEvent(command({ action: "seekbackward", seconds: 5 })), true);
   assert.equal(calls, 1);
+});
+
+test("the first arrow press beats a native window-capture ten-second shortcut", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true }, { earlyNative: true });
+  page.key("ArrowLeft");
+  assert.equal(page.video.currentTime, 45);
+  assert.equal(page.nativeKeys, 0);
+});
+
+test("five-second arrows work immediately with focus on native Play and timeline controls", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  const play = page.document.createElement("button");
+  play.setAttribute("aria-label", "Play");
+  page.document.getElementById("player-container").appendChild(play);
+  assert.equal(page.key("ArrowLeft", play).defaultPrevented, true);
+  assert.equal(page.video.currentTime, 45);
+  const timeline = page.document.querySelector('[type="range"]');
+  timeline.classList.add("timeline-slider");
+  assert.equal(page.key("ArrowRight", timeline).defaultPrevented, true);
+  assert.equal(page.video.currentTime, 50);
 });

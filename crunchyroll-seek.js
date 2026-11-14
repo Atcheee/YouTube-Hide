@@ -8,7 +8,6 @@
   const CLASS = "playback-plus-five-second-seek";
   const BADGE = "playback-plus-seek-icon";
   const originals = new Map();
-  const handledKeys = new Set();
   let enabled = false;
   let fiveSecondSeek = false;
   let keyboardShortcuts = false;
@@ -89,7 +88,7 @@
 
   function nativeCommand(video, action, seconds) {
     if (!video || video.readyState < 1) return false;
-    return !video.dispatchEvent(new CustomEvent("playback-plus-native-command", {
+    return !video.dispatchEvent(new CustomEvent("playback-plus-native-command-v2", {
       bubbles: true, cancelable: true, detail: JSON.stringify({ action, seconds })
     }));
   }
@@ -119,36 +118,26 @@
       const sign = direction(button);
       if (sign && seek(findVideo(button), sign)) consume(event);
     }, true);
-    window.addEventListener("keydown", event => {
-      if (!active() || event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
-      if (arrow ? !fiveSecondSeek : !keyboardShortcuts || !/^[jkl]$/i.test(event.key)) return;
-      const target = event.composedPath().find(node => node instanceof Element);
-      if (!target || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="slider"], [role="menu"], [role="dialog"]')) return;
-      const control = target.closest('a, button, [role="button"]');
-      if (control && !direction(control) && event.key.startsWith("Arrow")) return;
+    document.addEventListener("playback-plus-keyboard-request-v2", request => {
+      if (!active()) return;
+      let key;
+      try { ({ key } = JSON.parse(request.detail)); } catch { return; }
+      if (typeof key !== "string") return;
+      const arrow = key === "ArrowLeft" || key === "ArrowRight";
+      if (arrow ? !fiveSecondSeek : !keyboardShortcuts || !/^[jkl]$/i.test(key)) return;
+      const target = request.composedPath().find(node => node instanceof Element);
+      if (!target) return;
+      const timeline = target.matches('input.timeline-slider, [data-testid="timeline-controls-container"] input[type="range"]');
+      if (!timeline && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="slider"], [role="menu"], [role="dialog"]')) return;
       if (target !== document.body && target !== document.documentElement && !target.closest(PLAYER)) return;
       const video = findVideo(target);
-      if (event.key.toLowerCase() === "k") {
-        if (nativeCommand(video, "toggle")) {
-          consume(event);
-          handledKeys.add(event.code || event.key);
-        }
+      if (key.toLowerCase() === "k") {
+        if (nativeCommand(video, "toggle")) request.preventDefault();
         return;
       }
-      const sign = { ArrowLeft: -1, ArrowRight: 1, j: -1, J: -1, l: 1, L: 1 }[event.key];
-      const seconds = event.key.startsWith("Arrow") ? 5 : 10;
-      if (sign && seek(video, sign, seconds)) {
-        consume(event);
-        handledKeys.add(event.code || event.key);
-      }
+      const sign = { ArrowLeft: -1, ArrowRight: 1, j: -1, J: -1, l: 1, L: 1 }[key];
+      if (sign && seek(video, sign, arrow ? 5 : 10)) request.preventDefault();
     }, true);
-    // Native keyup handlers must not see an unmatched key release after we
-    // replaced keydown; that can leave the player's seek/pause state stuck.
-    window.addEventListener("keyup", event => {
-      if (handledKeys.delete(event.code || event.key)) consume(event);
-    }, true);
-    window.addEventListener("blur", () => handledKeys.clear());
     for (const event of ["loadedmetadata", "playing"]) document.addEventListener(event, schedule, true);
   }
 

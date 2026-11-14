@@ -3,9 +3,34 @@
 
   // MAIN world: Crunchyroll's media-session handlers and React timeline callback
   // belong to the page. Expose only fixed playback commands, never extension APIs.
-  if (window.__playbackPlusPlayerBridge) return;
-  window.__playbackPlusPlayerBridge = true;
+  if (window.__playbackPlusPlayerBridgeV2) return;
+  window.__playbackPlusPlayerBridgeV2 = true;
   const handlers = new Map();
+  const handledKeys = new Set();
+  // Register at document_start, before the site's window-capture shortcuts.
+  // The isolated script decides settings/focus and calls the native engine.
+  // Its synchronous acknowledgement also stops interception after invalidation.
+  window.addEventListener("keydown", event => {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!["ArrowLeft", "ArrowRight", "j", "J", "k", "K", "l", "L"].includes(event.key)) return;
+    const target = event.composedPath().find(node => node instanceof Element);
+    if (!target) return;
+    const request = new CustomEvent("playback-plus-keyboard-request-v2", {
+      bubbles: true, composed: true, cancelable: true,
+      detail: JSON.stringify({ key: event.key, code: event.code })
+    });
+    if (!target.dispatchEvent(request)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      handledKeys.add(event.code || event.key);
+    }
+  }, true);
+  window.addEventListener("keyup", event => {
+    if (!handledKeys.delete(event.code || event.key)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  window.addEventListener("blur", () => handledKeys.clear());
   const session = navigator.mediaSession;
   if (session?.setActionHandler) {
     const original = session.setActionHandler;
@@ -40,7 +65,7 @@
     return null;
   }
 
-  document.addEventListener("playback-plus-native-command", event => {
+  document.addEventListener("playback-plus-native-command-v2", event => {
     const video = event.target;
     if (!(video instanceof HTMLVideoElement) || !video.isConnected) return;
     let command;

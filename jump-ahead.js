@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  const settingsContext = PlaybackPlusSettings;
+  if (settingsContext.install && !settingsContext.install("jump-ahead")) return;
+
   // This feedback shape is shared by many controls. Always check the button label too.
   const FEEDBACK_SELECTOR = ".ytSpecTouchFeedbackShapeFill";
   const BUTTON_SELECTOR = 'button, [role="button"]';
@@ -223,6 +226,7 @@
   }
 
   function tryJumpAhead() {
+    if (settingsContext.isActive?.() === false) return;
     scanQueued = false;
     const videoId = currentVideoId();
     if (!enabled || navigating || !videoId || skippedVideos.has(videoId)) return;
@@ -248,6 +252,7 @@
   }
 
   function scheduleScan() {
+    if (settingsContext.isActive?.() === false) return;
     const videoId = currentVideoId();
     if (!enabled || navigating || !videoId || skippedVideos.has(videoId) || scanQueued) return;
     // Animation frames may stop in background tabs. Microtasks still run when

@@ -1,6 +1,16 @@
 (() => {
   "use strict";
 
+  if (globalThis.PlaybackPlusSettings?.isActive?.()) return;
+  const runtimeId = chrome.runtime?.id;
+  const version = chrome.runtime?.getManifest?.().version;
+  const installed = new Set();
+  function isActive() {
+    try {
+      return chrome.runtime?.id === runtimeId && chrome.runtime?.getManifest?.().version === version;
+    } catch { return false; }
+  }
+
   const defaults = Object.freeze({
     extensionEnabled: true,
     youtubeEnabled: true,
@@ -26,6 +36,12 @@
 
   globalThis.PlaybackPlusSettings = Object.freeze({
     defaults,
+    isActive,
+    install(name) {
+      if (installed.has(name)) return false;
+      installed.add(name);
+      return true;
+    },
     subscribe(listener) {
       listeners.add(listener);
       if (ready) listener({ ...state });

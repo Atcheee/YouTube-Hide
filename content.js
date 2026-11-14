@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  const settingsContext = PlaybackPlusSettings;
+  if (settingsContext.install && !settingsContext.install("content")) return;
+
   const HIDDEN_CLASS = "hide-streamed-days-video";
   // Matches metadata like "Streamed 1 hour ago", "Streamed 3 days ago", etc.
   const STREAMED_AGO_PATTERN =
@@ -226,6 +229,7 @@
   }
 
   function flushPending() {
+    if (settingsContext.isActive?.() === false) return;
     scanFrame = null;
 
     const cards = Array.from(pendingCards);
@@ -273,6 +277,7 @@
   }
 
   function handleMutations(mutations) {
+    if (settingsContext.isActive?.() === false) return;
     mutations.forEach((mutation) => {
       const targetElement =
         mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
@@ -288,6 +293,7 @@
   const observer = new MutationObserver(handleMutations);
 
   function scanPage() {
+    if (settingsContext.isActive?.() === false) return;
     if (
       !shouldHideStreamed() &&
       !shouldHideShorts() &&
@@ -338,6 +344,7 @@
     window.addEventListener("popstate", handleNavigation);
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (settingsContext.isActive?.() === false) return false;
       if (message?.type === "playback-plus-ping") {
         sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
         return false;

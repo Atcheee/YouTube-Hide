@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  const settingsContext = PlaybackPlusSettings;
+  if (settingsContext.install && !settingsContext.install("crunchyroll-playback-speed")) return;
+
   const STORAGE_KEY = "crunchyrollPlaybackSpeed";
   const BUTTON_SELECTOR = '[data-testid="playback-speed-button"], button[aria-label="Playback Speed Menu"]';
   const MIN_RATE = 0.25;
@@ -74,6 +77,7 @@
   }
 
   function applyRate(video) {
+    if (settingsContext.isActive?.() === false) return;
     if (!enabled || !hasPreference) return;
     const state = videoStates.get(video);
     if (Math.abs(video.playbackRate - selectedRate) < 0.001 &&
@@ -98,6 +102,7 @@
   }
 
   function render() {
+    if (settingsContext.isActive?.() === false) return;
     if (!enabled) return;
     const rate = displayedRate();
     for (const button of buttons) {
@@ -122,6 +127,7 @@
   }
 
   function chooseRate(value, persist = true) {
+    if (settingsContext.isActive?.() === false) return;
     if (!enabled) return;
     selectedRate = normalizeRate(value);
     hasPreference = true;
@@ -213,6 +219,7 @@
   }
 
   function onClick(event) {
+    if (settingsContext.isActive?.() === false) return;
     if (!enabled) return;
     const button = event.composedPath().find((node) => node instanceof Element && node.matches(BUTTON_SELECTOR));
     if (!button || button.matches(':disabled, [aria-disabled="true"]')) return;
@@ -228,6 +235,7 @@
   }
 
   function scan() {
+    if (settingsContext.isActive?.() === false) return;
     queued = false;
     if (!enabled) return;
     for (const button of buttonAttributes.keys()) {
@@ -255,6 +263,7 @@
   }
 
   function scheduleScan() {
+    if (settingsContext.isActive?.() === false) return;
     if (queued) return;
     queued = true;
     queueMicrotask(scan);

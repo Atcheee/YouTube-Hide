@@ -28,3 +28,20 @@ test("settings wait for storage and preserve changes arriving during the initial
   change({ youtubeEnabled: { newValue: false } }, "sync");
   assert.equal(received.length, 2);
 });
+
+test("reinjecting settings preserves subscribers and module installation state", () => {
+  let loads = 0;
+  const context = { chrome: { runtime: { id: "extension", getManifest: () => ({ version: "test" }) }, storage: {
+    sync: { get: (defaults, callback) => { loads++; callback(defaults); } },
+    onChanged: { addListener() {} }
+  } } };
+  runInNewContext(script, context);
+  const settings = context.PlaybackPlusSettings;
+  assert.equal(settings.install("jump-ahead"), true);
+  runInNewContext(script, context);
+  assert.equal(context.PlaybackPlusSettings, settings);
+  assert.equal(settings.install("jump-ahead"), false);
+  assert.equal(loads, 1);
+  delete context.chrome.runtime.id;
+  assert.equal(settings.isActive(), false);
+});

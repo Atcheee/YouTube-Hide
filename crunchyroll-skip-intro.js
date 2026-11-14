@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  const settingsContext = PlaybackPlusSettings;
+  if (settingsContext.install && !settingsContext.install("crunchyroll-skip-intro")) return;
+
   const BUTTON_SELECTOR = 'button[aria-label="Skip Intro"]';
   const skippedEpisodes = new Set();
   const pendingClaims = new Map();
@@ -167,6 +170,7 @@
   }
 
   function scan() {
+    if (settingsContext.isActive?.() === false) return;
     queued = false;
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;
@@ -208,6 +212,7 @@
   }
 
   function scheduleScan() {
+    if (settingsContext.isActive?.() === false) return;
     if (queued) return;
     queued = true;
     queueMicrotask(scan);
@@ -221,6 +226,7 @@
       scheduleScan();
     });
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (settingsContext.isActive?.() === false) return false;
         if (sender.id !== chrome.runtime.id) return false;
         if (message?.type === "crunchyroll-report-status") {
           chrome.runtime.sendMessage({ type: "crunchyroll-status", status: {

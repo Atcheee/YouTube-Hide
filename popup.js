@@ -126,6 +126,41 @@
   }
 
   let connectionState = "checking";
+  function ping(callback) {
+    chrome.tabs.sendMessage(activeTab.id, { type: "playback-plus-ping" }, { frameId: 0 }, response => {
+      const failed = Boolean(chrome.runtime.lastError);
+      callback(!failed && response?.version === chrome.runtime.getManifest().version);
+    });
+  }
+
+  function finishConnection(connected) {
+    connectionState = connected ? "connected" : "refresh";
+    document.getElementById("refresh-hint").hidden = connected;
+    renderConnection();
+    if (connected) checkDiagnostics();
+  }
+
+  function connect() {
+    ping(connected => {
+      if (connected) { finishConnection(true); return; }
+      connectionState = "checking";
+      renderConnection();
+      const registration = chrome.runtime.getManifest().content_scripts.find(entry =>
+        entry.matches.some(pattern => pattern.includes(`${activeSite}.com`)));
+      if (!registration || !chrome.scripting) { finishConnection(false); return; }
+      const target = { tabId: activeTab.id, allFrames: registration.all_frames === true };
+      // Restore a missing content-script connection without navigating the tab.
+      // Each module guards its installation, preserving state on repeated retries.
+      chrome.scripting.insertCSS({ target, files: registration.css }, () => {
+        if (chrome.runtime.lastError) { finishConnection(false); return; }
+        chrome.scripting.executeScript({ target, files: registration.js }, () => {
+          if (chrome.runtime.lastError) { finishConnection(false); return; }
+          ping(finishConnection);
+        });
+      });
+    });
+  }
+
   function renderConnection() {
     const status = document.getElementById("site-status");
     const detail = document.getElementById("site-detail");
@@ -194,12 +229,6 @@
     document.getElementById("diagnostics").hidden = activeSite !== "crunchyroll";
     if (!activeSite || !activeTab?.id) { renderConnection(); return; }
     if (!selectedByUser) selectSite(activeSite);
-    chrome.tabs.sendMessage(activeTab.id, { type: "playback-plus-ping" }, { frameId: 0 }, (response) => {
-      const failed = Boolean(chrome.runtime.lastError);
-      connectionState = !failed && response?.version === chrome.runtime.getManifest().version ? "connected" : "refresh";
-      document.getElementById("refresh-hint").hidden = connectionState === "connected";
-      renderConnection();
-    });
-    checkDiagnostics();
+    connect();
   });
 })();

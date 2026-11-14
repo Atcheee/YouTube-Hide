@@ -16,6 +16,8 @@ and Chrome. Previously called YouTube Hide; updating keeps your existing setting
   keeps the current page's one-time skip memory intact.
 - Current-tab connection status, a refresh button, expandable Crunchyroll player status,
   and reset-to-defaults are included. Reset changes only this extension's preferences.
+  Opening the popup automatically reconnects missing player tools without reloading
+  the video. A page refresh is offered only if automatic reconnection fails.
 
 The popup selects the current site's tab when opened from a supported page. Site tabs
 also support arrow keys. Settings remain available from other pages.
@@ -104,6 +106,8 @@ discarded tabs cannot run the content script, and background timers may be delay
   storage. Crunchyroll's selected playback speed remains local to this browser.
 - Hides only matching cards/sections; it does not remove or alter videos in your account.
 - Needs the `storage` permission so the toggles can persist across sessions.
+- Uses `scripting` and access to YouTube/Crunchyroll pages to reconnect tools in
+  already-open tabs. Healthy tabs keep their existing tools and skip memory.
 
 ## Install in Brave
 
@@ -111,7 +115,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Reload any already-open YouTube and Crunchyroll tabs once.
+5. Open the extension popup in already-open YouTube or Crunchyroll tabs to connect automatically.
 
 ## Install in Chrome
 
@@ -119,7 +123,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Reload any already-open YouTube and Crunchyroll tabs once.
+5. Open the extension popup in already-open YouTube or Crunchyroll tabs to connect automatically.
 
 ## Files
 
@@ -152,3 +156,7 @@ if the browser executable is not found automatically.
 `npm run test:popup` verifies the real popup's saved preferences, layout bounds, live
 speed changes, master pause, and native-menu restoration against a local player fixture
 in isolated Brave/Chromium. Set `PLAYBACK_TEST_BROWSER` to override browser discovery.
+`npm run test:connection` verifies recovery in tabs with no tools loaded, repeated
+popup opens, live settings, one-time skip memory, and cross-origin Crunchyroll frames
+without reloading the page. It uses a temporary extension copy with automatic script
+loading disabled to model tabs that were open before installation.

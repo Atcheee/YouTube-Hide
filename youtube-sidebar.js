@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  const settingsContext = PlaybackPlusSettings;
+  if (settingsContext.install && !settingsContext.install("youtube-sidebar")) return;
+
   const ROOTS = "ytd-mini-guide-renderer, ytd-guide-renderer";
   const ENTRIES = "ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer, yt-guide-entry-view-model";
   const HIDDEN = "playback-plus-sidebar-hidden";
@@ -42,6 +45,7 @@
   }
 
   function updateSidebar() {
+    if (settingsContext.isActive?.() === false) return;
     queued = false;
     const entries = [...document.querySelectorAll(ENTRIES)];
     const watchLater = entries.filter(entry => [...entry.querySelectorAll("a[href]")].some(link =>

@@ -7,7 +7,7 @@ const { JSDOM } = require("jsdom");
 const read = (name) => readFileSync(join(__dirname, "..", name), "utf8");
 const version = JSON.parse(read("manifest.json")).version;
 
-function setup(t, { url = "https://www.youtube.com/watch?v=video", sync = {}, local = {}, stale = false } = {}) {
+function setup(t, { url = "https://www.youtube.com/watch?v=video", sync = {}, local = {}, stale = false, recover = false, injectionFails = false } = {}) {
   const dom = new JSDOM(read("popup.html"), { url: "https://extension.test/popup.html", runScripts: "outside-only" });
   const { window } = dom;
   const closeWindow = window.close.bind(window);
@@ -15,12 +15,14 @@ function setup(t, { url = "https://www.youtube.com/watch?v=video", sync = {}, lo
   const listeners = [];
   const writes = [];
   const reloads = [];
+  const injections = [];
+  let connected = !stale;
   const values = { sync: { ...sync }, local: { ...local } };
   let failure = false;
   let closed = false;
   window.close = () => { closed = true; };
   const runtime = {
-    getManifest: () => ({ version }),
+    getManifest: () => ({ version, content_scripts: JSON.parse(read("manifest.json")).content_scripts }),
     sendMessage: (_message, callback) => callback({ frames: [{ frame: "Player frame", state: "Waiting for Skip Intro" }] })
   };
   function update(area, update) {
@@ -44,13 +46,23 @@ function setup(t, { url = "https://www.youtube.com/watch?v=video", sync = {}, lo
     }]))
   }, tabs: {
     query: (_query, callback) => callback([{ id: 7, url }]),
-    sendMessage: (_id, _message, _options, callback) => callback({ version: stale ? "1.8.4" : version }),
+    sendMessage: (_id, _message, _options, callback) => callback({ version: connected ? version : "1.8.4" }),
     reload: (id, callback) => { reloads.push(id); callback(); }
   } };
+  if (recover) window.chrome.scripting = {
+    insertCSS(options, callback) { injections.push({ css: options }); callback(); },
+    executeScript(options, callback) {
+      injections.push({ js: options });
+      if (injectionFails) runtime.lastError = { message: "Cannot access tab" };
+      else connected = true;
+      callback();
+      delete runtime.lastError;
+    }
+  };
   window.eval(read("settings.js"));
   window.eval(read("popup.js"));
   return {
-    window, document: window.document, values, writes, reloads, update,
+    window, document: window.document, values, writes, reloads, injections, update,
     get closed() { return closed; },
     failNextWrite() { failure = true; },
     input(key) { return window.document.querySelector(`[data-setting="${key}"]`); },
@@ -169,4 +181,26 @@ test("Watch later sidebar switch saves independently, respects site pause, and r
   page.element("reset-settings").click();
   assert.equal(toggle.checked, true);
   assert.equal(page.values.sync.youtubeWatchLaterShortcutEnabled, true);
+});
+
+for (const site of ["youtube", "crunchyroll"]) {
+  test(`${site} reconnects missing tools automatically without refreshing the tab`, t => {
+    const page = setup(t, { url: `https://www.${site}.com/watch/example`, stale: true, recover: true });
+    assert.match(page.element("site-status").textContent, /Connected/);
+    assert.equal(page.element("refresh-hint").hidden, true);
+    assert.equal(page.reloads.length, 0);
+    assert.equal(page.injections.length, 2);
+    const target = page.injections[1].js.target;
+    assert.equal(target.tabId, 7);
+    assert.equal(target.allFrames, site === "crunchyroll");
+    assert.equal(page.injections[1].js.files[0], "settings.js");
+  });
+}
+
+test("healthy tabs skip injection and failed recovery keeps a manual fallback", t => {
+  const healthy = setup(t, { recover: true });
+  assert.equal(healthy.injections.length, 0);
+  const failed = setup(t, { stale: true, recover: true, injectionFails: true });
+  assert.equal(failed.element("refresh-hint").hidden, false);
+  assert.equal(failed.reloads.length, 0);
 });

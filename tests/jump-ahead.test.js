@@ -8,7 +8,6 @@ const installSettings = require("../test-support/settings.cjs");
 const script = readFileSync(join(__dirname, "..", "jump-ahead.js"), "utf8");
 const overlay = readFileSync(join(__dirname, "fixtures", "jump-ahead.html"), "utf8");
 const styles = readFileSync(join(__dirname, "..", "styles.css"), "utf8");
-const uiScript = readFileSync(join(__dirname, "..", "youtube-player-ui.js"), "utf8");
 
 function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first", settings = {}) {
   const dom = new JSDOM(`<style>${styles}</style><div id="movie_player"><video></video>${markup}</div>`, {
@@ -48,8 +47,6 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
   };
   document.addEventListener("click", () => { clicks += 1; });
   const changeSettings = installSettings(window, settings);
-  document.getElementById("movie_player").showControls = () => {};
-  window.eval(uiScript);
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
 
@@ -540,7 +537,7 @@ test("layout boundary events cannot unmask unattended title, controls, or fullsc
   assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
 });
 
-test("stale CSS hover cannot block automatic checks or native player cleanup", async (t) => {
+test("stale CSS hover cannot block automatic checks or call native control APIs", async (t) => {
   const page = setup(t, "");
   const { timeline, container } = addTimeline(page);
   for (const element of [page.player, timeline, container]) {
@@ -552,7 +549,7 @@ test("stale CSS hover cannot block automatic checks or native player cleanup", a
   timeline.addEventListener("mousemove", () => page.player.insertAdjacentHTML("beforeend", overlay));
   await page.flush();
   assert.equal(page.clicks, 1);
-  assert.equal(nativeHides, 1);
+  assert.equal(nativeHides, 0);
 });
 
 test("stationary mouse input expires without boundary events extending its activity", async (t) => {
@@ -560,19 +557,19 @@ test("stationary mouse input expires without boundary events extending its activ
   const video = setPlaying(page);
   let now = 1000;
   t.mock.method(page.window.Date, "now", () => now);
-  let nativeHides = 0;
-  page.player.hideControls = () => { nativeHides += 1; };
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
   page.userPointerMove(video);
   await page.flush();
   now += 2999;
   page.userEvent("pointerover", video);
   page.poll();
   await page.flush();
-  assert.equal(nativeHides, 0);
+  assert.equal(movements, 0);
   now += 1;
   page.poll();
   await page.flush();
-  assert.equal(nativeHides, 1);
+  assert.equal(movements, 1);
   assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
 });
 
@@ -618,11 +615,10 @@ test("pausing restores native controls and does not call native hideControls", a
   let nativeHides = 0;
   page.player.hideControls = () => { nativeHides += 1; };
   await page.flush();
-  assert.equal(nativeHides, 1);
+  assert.equal(nativeHides, 0);
   Object.defineProperty(video, "paused", { configurable: true, value: true });
   page.event("pause", video);
-  page.document.dispatchEvent(new page.window.Event("youtube-hide-end-automatic-activity"));
-  assert.equal(nativeHides, 1);
+  assert.equal(nativeHides, 0);
   assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
 });
 
@@ -672,32 +668,32 @@ test("skip notice can be hidden without disabling YouTube auto-skip", async (t) 
 });
 
 for (const type of ["pointermove", "pointerdown", "click", "wheel", "keydown"]) {
-  test(`manual ${type} reenables native controls disabled by an earlier automatic check`, async (t) => {
+  test(`manual ${type} removes masks without changing native control state`, async (t) => {
     const page = setup(t, "");
     const video = setPlaying(page);
-    let disabled = false;
+    let hides = 0;
     let shows = 0;
-    page.player.hideControls = () => { disabled = true; };
-    page.player.showControls = () => { disabled = false; shows += 1; };
+    page.player.hideControls = () => { hides += 1; };
+    page.player.showControls = () => { shows += 1; };
     await page.flush();
-    assert.equal(disabled, true);
+    assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
     page.userEvent(type, video);
-    assert.equal(disabled, false);
-    assert.equal(shows, 1);
+    assert.equal(hides, 0);
+    assert.equal(shows, 0);
     assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
   });
 }
 
-test("native control restoration also runs when auto-skip is turned off", async (t) => {
+test("turning auto-skip off releases masks without changing native control state", async (t) => {
   const page = setup(t, "");
   setPlaying(page);
-  let disabled = false;
-  page.player.hideControls = () => { disabled = true; };
-  page.player.showControls = () => { disabled = false; };
+  let nativeCalls = 0;
+  page.player.hideControls = page.player.showControls = () => { nativeCalls += 1; };
   await page.flush();
-  assert.equal(disabled, true);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
   page.changeSettings({ youtubeAutoJumpEnabled: false });
-  assert.equal(disabled, false);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  assert.equal(nativeCalls, 0);
 });
 
 test("native controls are never disabled when no matching restore API exists", async (t) => {

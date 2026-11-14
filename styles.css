@@ -32,7 +32,33 @@ ytd-grid-video-renderer.hide-streamed-days-video {
 #movie_player.youtube-hide-auto-activity .ytp-chrome-top,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-bottom,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-top,
+#movie_player.youtube-hide-auto-activity .ytp-fullscreen-metadata,
 #movie_player.youtube-hide-auto-activity .ytp-fullscreen-quick-actions,
 #movie_player.youtube-hide-auto-activity .ytp-fullscreen-grid {
   opacity: 0 !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Modern fullscreen titles and quick actions occupy space even at opacity:0.
+   Match their native idle layout so they cannot lift the channel watermark. */
+#movie_player.youtube-hide-auto-activity .ytp-fullscreen-metadata,
+#movie_player.youtube-hide-auto-activity .ytp-fullscreen-quick-actions {
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+/* YouTube normally changes this from 24px to the control-bar height on hover.
+   Keep the entire overlay stack at its native idle offset between our checks. */
+#movie_player.youtube-hide-auto-activity .ytp-overlays-container {
+  bottom: 24px !important;
+  transition: none !important;
+  animation: none !important;
+}
+
+#movie_player.youtube-hide-auto-activity.ytp-player-minimized .ytp-overlays-container {
+  bottom: 36px !important;
 }

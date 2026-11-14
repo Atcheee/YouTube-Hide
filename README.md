@@ -40,11 +40,12 @@ previews, and send matching leave events after a skip or a 250 ms check window. 
 suppression remains while unattended. Genuine player input ends artificial timeline hover
 and releases every mask so manual tooltips and controls remain available. Unattended checks also suppress native control bars
 and gradients, including the fullscreen Like/Dislike/Comments/Share row, so they do not blink.
-Checks close both timeline and full player hover when unattended, then ask YouTube's native
-`hideControls()` API to finish cleanup. Real movement, button presses, or keyboard input
-remove suppression and call the matching `showControls()` API; native `hideControls()`
-otherwise keeps rendering disabled even through genuine hover. Clicks and wheel input
-also restore controls. Layout-generated over/enter events do not. Video-surface pointer
+Checks close both timeline and full player hover when unattended. They never call native
+`hideControls()`/`showControls()`: toggling those APIs changes the fullscreen overlay layout.
+Quiet CSS includes the separate modern fullscreen title, collapses hidden quick-action
+rows, and holds the overlay stack at YouTube's native idle offset of 24px. This keeps the
+channel watermark from moving during checks. Real movement, button presses, keyboard,
+clicks, and wheel input remove suppression. Layout-generated over/enter events do not. Video-surface pointer
 interaction expires after three idle seconds; intentional control-bar hover and held
 mouse buttons remain protected, so stale CSS `:hover` from
 another monitor cannot keep controls awake. Artificial hover also closes on window blur,
@@ -118,9 +119,10 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `manifest.json`: Manifest V3 registration for both sites, popup, and storage.
 - `popup.html` / `popup.js` / `popup.css`: Site settings, speed controls, and connection status.
 - `settings.js`: Shared settings defaults, initial loading, and live storage updates.
+- `icons/`: Shared play-and-plus icon for the toolbar, extension manager, and popup.
+  Run `npm run build:icons` to regenerate PNG sizes from the SVG source.
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
-- `youtube-player-ui.js`: MAIN-world companion for native player UI cleanup after probes.
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
@@ -134,8 +136,8 @@ matching YouTube's Jump ahead overlay, including rewinds and single-page navigat
 profile, checks the speed picker's real media playback timing, and verifies settings survive
 a page reload. It uses a local player fixture, not a signed-in Crunchyroll session. Set
 `CRUNCHYROLL_TEST_BROWSER` if your browser executable is not found automatically.
-`npm run test:youtube-hover` checks unattended title/control/arrow visibility, native
-player cleanup, layout-generated boundary events, stale CSS hover, manual previews,
+`npm run test:youtube-hover` samples repeated unattended checks frame by frame for title/control
+flicker and channel-watermark movement, and verifies layout-generated events, stale CSS hover, manual previews,
 and one-time auto-skipping in an isolated Brave/Chromium
 profile with the real extension and a local player fixture. Set `YOUTUBE_TEST_BROWSER`
 if the browser executable is not found automatically.

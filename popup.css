@@ -18,8 +18,7 @@ button:disabled { cursor: default; }
 button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .panel { padding: 16px; }
 .header { display: flex; gap: 11px; align-items: center; margin-bottom: 14px; }
-.brand-mark { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; background: #2e3453; color: #c2cbff; }
-.brand-mark svg { width: 27px; height: 27px; }
+.brand-mark { width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; }
 h1 { margin: 0; font-size: 18px; letter-spacing: -.4px; font-weight: 700; }
 .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
 .master-toggle { margin-left: auto; cursor: pointer; }

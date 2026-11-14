@@ -72,7 +72,6 @@
     quietPlayer?.classList.remove(QUIET_CLASS);
     quietPlayer = null;
     automaticPlayer = null;
-    document.dispatchEvent(new Event("youtube-hide-restore-user-controls"));
   }
 
   function endPlayerActivity() {
@@ -93,9 +92,6 @@
       dispatchHover(target, "mouseleave", options, false);
       if (target === player) break;
     }
-    // The native player owns more hover UI than its visible control wrappers.
-    // A MAIN-world companion calls its API; isolated content scripts cannot.
-    document.dispatchEvent(new Event("youtube-hide-end-automatic-activity"));
   }
 
   function quietAutomaticActivity(player) {
@@ -106,7 +102,6 @@
     previewPlayer = player;
     // Apply before mouse events so unattended probes cannot flash native chrome.
     player.classList.add(QUIET_CLASS, PROBE_CLASS);
-    document.dispatchEvent(new Event("youtube-hide-begin-automatic-activity"));
   }
 
   function probeTimeline(player, video) {

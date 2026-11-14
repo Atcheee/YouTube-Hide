@@ -10,15 +10,28 @@
   .ytp-tooltip { display: none; position: absolute; left: 70px; bottom: 80px; width: 200px; height: 110px; background: #ddd; color: #111; }
   #movie_player[data-native-hover="true"] .ytp-tooltip { display: block; }
   .ytp-timely-actions-overlay { position: absolute; right: 30px; bottom: 110px; }
-  .ytp-fullscreen-quick-actions { position: absolute; right: 16px; bottom: 80px; opacity: 0; }
+  /* Match the modern player's separate fullscreen title and overlay stack.
+     A transparent quick-action row still raises the channel icon below it. */
+  .ytp-overlays-container { position: absolute; top: 24px; left: 24px; right: 24px; bottom: 96px; transition: bottom .1s; pointer-events: none; }
+  .ytp-autohide .ytp-overlays-container { bottom: 24px; }
+  .ytp-overlay-bottom-right { position: absolute; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: flex-end; }
+  .ytp-overlay-bottom-right > * { pointer-events: auto; margin-top: 12px; }
+  .iv-branding { width: 28px; height: 28px; background: #cb9d38; border-radius: 50%; }
+  .ytp-fullscreen-metadata { position: absolute; top: 0; left: 0; height: 30px; opacity: 0; }
+  .ytp-fullscreen-quick-actions { height: 28px; opacity: 0; }
+  .ytp-autohide .ytp-fullscreen-metadata, .ytp-autohide .ytp-fullscreen-quick-actions { height: 0; margin: 0; }
   .ytp-fullscreen-grid { position: absolute; left: 48%; bottom: 6px; opacity: 0; }
 </style></head><body>
-<div id="movie_player" data-native-hover="false">
+<div id="movie_player" class="ytp-autohide" data-native-hover="false">
   <video muted playsinline></video>
   <div class="ytp-chrome-top">Video title</div>
   <div class="ytp-tooltip">Pull up for precise seeking</div>
   <div class="ytp-chrome-bottom"><div class="ytp-progress-bar-container"><div class="ytp-progress-bar"></div></div></div>
-  <div class="ytp-fullscreen-quick-actions" data-overlay-order="13">
+  <div class="ytp-overlays-container">
+    <div class="ytp-fullscreen-metadata">Modern fullscreen video title</div>
+    <div class="ytp-overlay-bottom-right">
+      <div class="iv-branding" aria-label="Channel watermark"></div>
+      <div class="ytp-fullscreen-quick-actions" data-overlay-order="13">
     <yt-player-quick-action-buttons class="ytPlayerQuickActionButtonsHost ytPlayerQuickActionButtonsHostCompactControls ytPlayerQuickActionButtonsHostDisableBackdropFilter">
       <button aria-label="like this video"><span class="ytSpecTouchFeedbackShapeFill"></span>Like</button>
       <button aria-label="Dislike this video"><span class="ytSpecTouchFeedbackShapeFill"></span>Dislike</button>
@@ -26,6 +39,8 @@
       <button aria-label="Share"><span class="ytSpecTouchFeedbackShapeFill"></span>Share</button>
       <button aria-label="More actions"><span class="ytSpecTouchFeedbackShapeFill"></span>More</button>
     </yt-player-quick-action-buttons>
+      </div>
+    </div>
   </div>
   <div class="ytp-fullscreen-grid"><button aria-label="Show related videos">⌃</button></div>
 </div>
@@ -35,6 +50,7 @@
   const timeline = player.querySelector('.ytp-progress-bar');
   const bar = player.querySelector('.ytp-chrome-bottom');
   const title = player.querySelector('.ytp-chrome-top');
+  const metadata = player.querySelector('.ytp-fullscreen-metadata');
   const quickActions = player.querySelector('.ytp-fullscreen-quick-actions');
   const grid = player.querySelector('.ytp-fullscreen-grid');
   window.hoverFixture = { hovers: 0, leaves: 0, playerLeaves: 0, nativeHides: 0, nativeShows: 0, controlsDisabled: false, actions: 0, jumps: 0, offerJump: false, seeks: 0 };
@@ -53,12 +69,17 @@
   let hideControls;
   function wakeControls() {
     if (hoverFixture.controlsDisabled) return;
+    player.classList.remove('ytp-autohide');
     bar.style.opacity = '1';
     title.style.opacity = '1';
+    metadata.style.opacity = '1';
     quickActions.style.opacity = '1';
     grid.style.opacity = '1';
     clearTimeout(hideControls);
-    hideControls = setTimeout(() => { bar.style.opacity = '0'; title.style.opacity = '0'; quickActions.style.opacity = '0'; grid.style.opacity = '0'; }, 350);
+    hideControls = setTimeout(() => {
+      player.classList.add('ytp-autohide');
+      bar.style.opacity = '0'; title.style.opacity = '0'; metadata.style.opacity = '0'; quickActions.style.opacity = '0'; grid.style.opacity = '0';
+    }, 350);
   }
   player.addEventListener('mousemove', wakeControls);
   player.addEventListener('mouseover', wakeControls);
@@ -66,8 +87,10 @@
   player.addEventListener('keydown', wakeControls);
   player.addEventListener('mouseleave', () => {
     hoverFixture.playerLeaves += 1;
+    player.classList.add('ytp-autohide');
     bar.style.opacity = '0';
     title.style.opacity = '0';
+    metadata.style.opacity = '0';
     quickActions.style.opacity = '0';
     grid.style.opacity = '0';
   });

@@ -327,83 +327,50 @@ function addTimeline(page, duration = 600, currentTime = 120) {
   return { video, timeline, container: timeline.parentElement };
 }
 
-test("timeline-only hover reveals the prompt at the playhead without clicks, dragging or seeking", async (t) => {
+test("background skip checks never activate timeline previews or seek the video", async (t) => {
   const page = setup(t, "");
   const { video, timeline, container } = addTimeline(page);
-  Object.defineProperty(page.document, "hidden", { value: false });
-  t.mock.method(page.document, "hasFocus", () => true);
-  t.mock.method(page.window, "focus", () => assert.fail("Must not focus the tab"));
-  let entered = false;
-  let timelineMoves = 0;
-  container.addEventListener("mouseenter", () => { entered = true; });
-  for (const type of ["mousedown", "mouseup", "pointerdown", "pointerup", "click"]) {
-    timeline.addEventListener(type, () => assert.fail(`Hover must not dispatch ${type}`));
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let timelineEvents = 0;
+  for (const target of [timeline, container]) {
+    for (const type of ["mouseover", "mouseenter", "mousemove", "pointerover", "pointerenter",
+      "pointermove", "mousedown", "mouseup", "pointerdown", "pointerup", "click"]) {
+      target.addEventListener(type, () => { timelineEvents += 1; });
+    }
   }
-  timeline.addEventListener("mousemove", (event) => {
-    timelineMoves += 1;
-    assert.equal(entered, true);
-    assert.equal(event.clientX, 260);
-    assert.equal(event.clientY, 403);
-    assert.equal(event.buttons, 0);
-    page.window.queueMicrotask(() => page.player.insertAdjacentHTML("beforeend", overlay));
-  });
-  await page.flush();
-  assert.equal(timelineMoves, 1);
-  assert.equal(page.clicks, 1);
+  for (let check = 0; check < 3; check += 1) {
+    now += 1000;
+    page.poll();
+    page.event("timeupdate", video);
+    await page.flush();
+  }
+  assert.equal(timelineEvents, 0);
   assert.equal(video.currentTime, 120);
-  assert.equal(page.player.querySelector(".youtube-hide-jump-notice").textContent, "Jumped ahead");
-  video.currentTime = 110;
-  page.event("seeked", video);
-  page.poll();
+  assert.equal(page.clicks, 0);
+  page.player.insertAdjacentHTML("beforeend", overlay);
   await page.flush();
-  assert.equal(timelineMoves, 1);
   assert.equal(page.clicks, 1);
+  assert.equal(timelineEvents, 0);
 });
 
-test("timeline pointer listeners receive mouse pointer hover when PointerEvent is supported", async (t) => {
+test("real timeline hover still works and a resulting Jump ahead prompt is clicked only once", async (t) => {
   const page = setup(t, "");
-  const { timeline } = addTimeline(page);
-  // jsdom lacks PointerEvent; emulate the browser constructor for this path.
-  page.window.PointerEvent = class extends page.window.MouseEvent {
-    constructor(type, options) {
-      super(type, options);
-      this.pointerType = options.pointerType;
-    }
-  };
-  let entered = false;
-  timeline.addEventListener("pointerenter", () => { entered = true; });
-  timeline.addEventListener("pointermove", (event) => {
-    assert.equal(entered, true);
-    assert.equal(event.pointerType, "mouse");
+  const { timeline, video } = addTimeline(page);
+  let previews = 0;
+  timeline.addEventListener("mousemove", () => {
+    previews += 1;
     page.player.insertAdjacentHTML("beforeend", overlay);
   });
   await page.flush();
+  assert.equal(previews, 0);
+  timeline.dispatchEvent(new page.window.MouseEvent("mousemove", { bubbles: true }));
+  await page.flush();
+  assert.equal(previews, 1);
   assert.equal(page.clicks, 1);
-});
-
-test("timeline hover stays inside its edges at the start and end of a video", async (t) => {
-  for (const [time, expectedX] of [[0, 101], [600, 899]]) {
-    const page = setup(t, "");
-    const { timeline } = addTimeline(page, 600, time);
-    const positions = [];
-    timeline.addEventListener("mousemove", (event) => positions.push(event.clientX));
-    await page.flush();
-    assert.deepEqual(positions, [expectedX]);
-    assert.equal(page.clicks, 0);
-  }
-});
-
-test("does not invent timeline positions for live streams or a timeline with no layout", async (t) => {
-  for (const duration of [Infinity, NaN, 600]) {
-    const page = setup(t, "");
-    const { timeline } = addTimeline(page, duration);
-    if (duration === 600) {
-      timeline.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0 });
-    }
-    let movements = 0;
-    timeline.addEventListener("mousemove", () => { movements += 1; });
-    await page.flush();
-    assert.equal(movements, 0);
-    assert.equal(page.clicks, 0);
-  }
+  page.event("seeked", video);
+  page.poll();
+  await page.flush();
+  assert.equal(previews, 1);
+  assert.equal(page.clicks, 1);
 });

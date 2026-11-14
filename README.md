@@ -13,12 +13,29 @@ Also automatically clicks the player's visible **Jump ahead** button once per vi
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
 Playback events and a one-second fallback check work without animation frames or tab
-focus. During playback, the extension sends simulated player and timeline hover events
-to reveal hover-driven actions, without moving your cursor or switching tabs. Timeline
-hover targets the current playback position; it never clicks/drags the timeline or seeks
-the video itself. It stops doing this once that video has been skipped.
+focus. During playback, the extension sends simulated movement to the video surface
+to reveal hover-driven actions, without moving your cursor or switching tabs. It avoids
+timeline hover so it does not open seek previews. If YouTube only creates the Jump ahead
+button after real timeline hover, auto-skipping waits for that button to appear.
+Simulated movement stops once that video has been skipped.
 YouTube must accept the simulated event and expose the button; browser-frozen or
 discarded tabs cannot run the content script, and background timers may be delayed.
+
+## Crunchyroll
+
+- Automatically clicks **Skip Intro** on `crunchyroll.com`, including inside player
+  frames. Matches the button's exact label, text, and `skip-intro-icon` marker.
+- Works with the supplied unhovered state (`aria-hidden="true"`, opacity zero,
+  pointer events disabled), so no mouse hover is needed. Truly disabled controls,
+  elements removed from layout, and known unloaded videos are ignored. Controls can
+  live separately from the video element, including outside its iframe or shadow root.
+- Skips only once per episode in the current watch-page session. Rewinding or
+  recreating the player iframe does not reset it. Each new episode gets its own skip;
+  refreshing the watch page resets memory. Manual intro skips are remembered too.
+- Shows a centered **Jumped ahead** notice over the video for two seconds after
+  automatic skips, including in player fullscreen. Does not skip recaps or credits.
+- The extension popup shows the detected intro-button count and skip status for each
+  Crunchyroll frame. Open it during the intro if auto-skip does not run.
 
 ## Behavior
 
@@ -61,6 +78,8 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
 - `styles.css`: Hides matched cards and sections.
+- `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
+- `background.js`: Relays player-frame skip claims to the watch page's episode memory.
 
 ## Tests
 

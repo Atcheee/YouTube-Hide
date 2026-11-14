@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Hide",
-  "version": "1.6.2",
-  "description": "Hide streamed videos, Shorts, Mixes, and music videos; automatically click Jump ahead once per video.",
+  "version": "1.7.2",
+  "description": "Hide YouTube clutter, auto-click Jump ahead, and skip Crunchyroll intros once per episode.",
   "permissions": [
     "storage",
     "activeTab"
@@ -10,6 +10,9 @@
   "action": {
     "default_title": "YouTube Hide",
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -24,6 +27,16 @@
       "css": [
         "styles.css"
       ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://crunchyroll.com/*",
+        "*://*.crunchyroll.com/*"
+      ],
+      "js": ["crunchyroll-skip-intro.js"],
+      "css": ["crunchyroll.css"],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ]

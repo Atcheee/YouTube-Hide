@@ -1,0 +1,13 @@
+.youtube-hide-crunchyroll-notice {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  z-index: 2147483647;
+  pointer-events: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font: 600 18px/1.4 Arial, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+}

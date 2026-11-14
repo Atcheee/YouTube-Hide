@@ -68,6 +68,14 @@ body {
   user-select: none;
 }
 
+.crunchyroll-status {
+  padding: 8px 10px;
+  background: var(--panel);
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: pre-line;
+}
+
 .toggle + .toggle {
   margin-top: 8px;
 }

@@ -70,48 +70,6 @@
     return null;
   }
 
-  function hoverTimeline(player, video) {
-    const timeline = player.querySelector(".ytp-progress-bar") ||
-      player.querySelector(".ytp-progress-bar-container");
-    if (!timeline || !Number.isFinite(video.duration) || video.duration <= 0 ||
-        !Number.isFinite(video.currentTime)) return;
-
-    const bounds = timeline.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return;
-    const progress = Math.max(0, Math.min(1, video.currentTime / video.duration));
-    const inset = Math.min(1, bounds.width / 2);
-    const options = {
-      view: window,
-      clientX: bounds.left + Math.max(inset, Math.min(bounds.width - inset, bounds.width * progress)),
-      clientY: bounds.top + bounds.height / 2,
-      relatedTarget: video,
-      buttons: 0
-    };
-
-    function dispatch(target, type, bubbles) {
-      if (type.startsWith("pointer")) {
-        if (typeof PointerEvent !== "function") return;
-        target.dispatchEvent(new PointerEvent(type, {
-          ...options, bubbles, pointerId: 1, pointerType: "mouse", isPrimary: true
-        }));
-      } else {
-        target.dispatchEvent(new MouseEvent(type, { ...options, bubbles }));
-      }
-    }
-
-    dispatch(timeline, "pointerover", true);
-    dispatch(timeline, "mouseover", true);
-    // mouseenter/pointerenter do not bubble. Notify the enclosing hover surface too.
-    const container = timeline.closest(".ytp-progress-bar-container");
-    for (const target of container && container !== timeline ? [container, timeline] : [timeline]) {
-      dispatch(target, "pointerenter", false);
-      dispatch(target, "mouseenter", false);
-    }
-    dispatch(timeline, "pointermove", true);
-    dispatch(timeline, "mousemove", true);
-    // Never send down/up/click events or change currentTime here: hover must not seek.
-  }
-
   function revealPlayerActions(player) {
     const video = player.querySelector("video");
     if (!video || video.paused || video.ended || video.seeking || video.readyState < 2) return;
@@ -122,6 +80,7 @@
 
     // Ask YouTube to reveal hover-driven actions without focusing the tab or moving
     // the real cursor. Do not bypass disabled/hidden controls if it ignores the event.
+    // Keep activity on the video surface: timeline hover opens seek previews.
     const bounds = player.getBoundingClientRect();
     video.dispatchEvent(new MouseEvent("mousemove", {
       bubbles: true,
@@ -129,9 +88,6 @@
       clientX: bounds.left + bounds.width / 2,
       clientY: bounds.top + bounds.height / 2
     }));
-    if (!navigating && !skippedVideos.has(currentVideoId()) && !availableJumpButton(player)) {
-      hoverTimeline(player, video);
-    }
   }
 
   function tryJumpAhead() {

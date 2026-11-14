@@ -14,10 +14,12 @@ The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing butt
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
 Playback events and a one-second fallback check work without animation frames or tab
 focus. During playback, the extension sends simulated movement to the video surface
-to reveal hover-driven actions, without moving your cursor or switching tabs. It avoids
-timeline hover so it does not open seek previews. If YouTube only creates the Jump ahead
-button after real timeline hover, auto-skipping waits for that button to appear.
-Simulated movement stops once that video has been skipped.
+and brief timeline hover checks to reveal Jump ahead, without moving your cursor or
+switching tabs. Timeline checks target the current playback position, suppress thumbnail
+previews, and send matching leave events after a skip or a 250 ms check window. Preview
+suppression remains until real pointer or keyboard input so delayed thumbnails stay hidden;
+real timeline hover keeps normal previews. Simulated movement stops once that video has
+been skipped. The extension never clicks/drags the timeline or changes playback time itself.
 YouTube must accept the simulated event and expose the button; browser-frozen or
 discarded tabs cannot run the content script, and background timers may be delayed.
 

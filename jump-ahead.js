@@ -6,12 +6,85 @@
   const BUTTON_SELECTOR = 'button, [role="button"]';
   const JUMP_AHEAD_PATTERN = /\bjump\s+ahead\b/i;
   const CHECK_INTERVAL_MS = 1000;
+  const PROBE_CLASS = "youtube-hide-timeline-probe";
   const skippedVideos = new Set();
   let scanQueued = false;
   let lastPlayerActivity = -Infinity;
   let navigating = false;
   let jumpNotice = null;
   let noticeTimer = null;
+  let timelineProbe = null;
+  let previewPlayer = null;
+
+  function dispatchHover(target, type, options, bubbles = true) {
+    if (type.startsWith("pointer")) {
+      if (typeof PointerEvent !== "function") return;
+      target.dispatchEvent(new PointerEvent(type, {
+        ...options, bubbles, pointerId: 1, pointerType: "mouse", isPrimary: true
+      }));
+    } else {
+      target.dispatchEvent(new MouseEvent(type, { ...options, bubbles }));
+    }
+  }
+
+  function endTimelineProbe(sendLeave = true) {
+    const probe = timelineProbe;
+    if (!probe) return;
+    timelineProbe = null;
+    window.clearTimeout(probe.timer);
+    if (!sendLeave) return;
+    const options = { ...probe.options, relatedTarget: probe.video };
+    dispatchHover(probe.timeline, "pointerout", options);
+    dispatchHover(probe.timeline, "mouseout", options);
+    for (const target of probe.targets.slice().reverse()) {
+      dispatchHover(target, "pointerleave", options, false);
+      dispatchHover(target, "mouseleave", options, false);
+    }
+  }
+
+  function restoreUserPreviews() {
+    previewPlayer?.classList.remove(PROBE_CLASS);
+    previewPlayer = null;
+  }
+
+  function probeTimeline(player, video) {
+    const timeline = player.querySelector(".ytp-progress-bar") ||
+      player.querySelector(".ytp-progress-bar-container");
+    if (!timeline || timelineProbe || !Number.isFinite(video.duration) || video.duration <= 0 ||
+        !Number.isFinite(video.currentTime)) return;
+    const container = timeline.closest(".ytp-progress-bar-container");
+    // Let a real hover retain YouTube's normal thumbnail preview and controls.
+    if (timeline.matches(":hover") || container?.matches(":hover")) return;
+    const bounds = timeline.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+    const inset = Math.min(1, bounds.width / 2);
+    const progress = Math.max(0, Math.min(1, video.currentTime / video.duration));
+    const options = {
+      view: window, buttons: 0, relatedTarget: video,
+      clientX: bounds.left + Math.max(inset, Math.min(bounds.width - inset, bounds.width * progress)),
+      clientY: bounds.top + bounds.height / 2
+    };
+    const targets = container && container !== timeline ? [container, timeline] : [timeline];
+    restoreUserPreviews();
+    previewPlayer = player;
+    // Keep suppression until genuine user input, including delayed tooltip updates.
+    player.classList.add(PROBE_CLASS);
+    const probe = { timeline, targets, video, options, timer: null };
+    timelineProbe = probe;
+    probe.timer = window.setTimeout(() => {
+      if (timelineProbe !== probe) return;
+      try { tryJumpAhead(); } finally { endTimelineProbe(); }
+    }, 250);
+    dispatchHover(timeline, "pointerover", options);
+    dispatchHover(timeline, "mouseover", options);
+    for (const target of targets) {
+      dispatchHover(target, "pointerenter", options, false);
+      dispatchHover(target, "mouseenter", options, false);
+    }
+    dispatchHover(timeline, "pointermove", options);
+    dispatchHover(timeline, "mousemove", options);
+    // Only hover events: no down/up/click events or direct changes to currentTime.
+  }
 
   function clearJumpNotice() {
     if (noticeTimer !== null) window.clearTimeout(noticeTimer);
@@ -73,6 +146,8 @@
   function revealPlayerActions(player) {
     const video = player.querySelector("video");
     if (!video || video.paused || video.ended || video.seeking || video.readyState < 2) return;
+    const timeline = player.querySelector(".ytp-progress-bar-container") || player.querySelector(".ytp-progress-bar");
+    if (timeline?.matches(":hover")) return;
 
     const now = Date.now();
     if (now - lastPlayerActivity < CHECK_INTERVAL_MS) return;
@@ -80,7 +155,6 @@
 
     // Ask YouTube to reveal hover-driven actions without focusing the tab or moving
     // the real cursor. Do not bypass disabled/hidden controls if it ignores the event.
-    // Keep activity on the video surface: timeline hover opens seek previews.
     const bounds = player.getBoundingClientRect();
     video.dispatchEvent(new MouseEvent("mousemove", {
       bubbles: true,
@@ -88,6 +162,9 @@
       clientX: bounds.left + bounds.width / 2,
       clientY: bounds.top + bounds.height / 2
     }));
+    if (!navigating && !skippedVideos.has(currentVideoId()) && !availableJumpButton(player)) {
+      probeTimeline(player, video);
+    }
   }
 
   function tryJumpAhead() {
@@ -108,7 +185,7 @@
     // Record before clicking: click handlers can synchronously change the DOM.
     // Keep video IDs across seeks, button replacements and SPA back navigation.
     skippedVideos.add(videoId);
-    button.click();
+    try { button.click(); } finally { endTimelineProbe(); }
     if (!navigating && currentVideoId() === videoId) showJumpNotice(player);
   }
 
@@ -132,6 +209,8 @@
 
     document.addEventListener("yt-navigate-start", () => {
       navigating = true;
+      endTimelineProbe();
+      restoreUserPreviews();
       clearJumpNotice();
     });
     document.addEventListener("yt-navigate-finish", () => {
@@ -142,6 +221,17 @@
     document.addEventListener("visibilitychange", scheduleScan);
     window.addEventListener("focus", scheduleScan);
     window.setInterval(scheduleScan, CHECK_INTERVAL_MS);
+    for (const event of ["pointermove", "mousemove", "pointerover", "mouseover", "pointerdown", "mousedown", "keydown"]) {
+      document.addEventListener(event, (input) => {
+        if (!input.isTrusted) return;
+        if (input.type !== "keydown" &&
+            !(input.target instanceof Element && input.target.closest("#movie_player"))) return;
+        // A real pointer now owns hover state. Do not send fake leave events over it.
+        endTimelineProbe(input.type === "keydown");
+        restoreUserPreviews();
+        lastPlayerActivity = Date.now();
+      }, true);
+    }
     // Also catch visibility changes caused by playback or CSS transitions.
     for (const event of ["timeupdate", "seeked", "playing", "transitionend", "animationend"]) {
       document.addEventListener(event, scheduleScan, true);

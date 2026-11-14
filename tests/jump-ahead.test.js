@@ -6,14 +6,21 @@ const { JSDOM } = require("jsdom");
 
 const script = readFileSync(join(__dirname, "..", "jump-ahead.js"), "utf8");
 const overlay = readFileSync(join(__dirname, "fixtures", "jump-ahead.html"), "utf8");
+const styles = readFileSync(join(__dirname, "..", "styles.css"), "utf8");
 
 function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first") {
-  const dom = new JSDOM(`<div id="movie_player"><video></video>${markup}</div>`, {
+  const dom = new JSDOM(`<style>${styles}</style><div id="movie_player"><video></video>${markup}</div>`, {
     url,
     runScripts: "outside-only"
   });
   const { window } = dom;
   const { document } = window;
+  const userInputHandlers = [];
+  const addListener = document.addEventListener.bind(document);
+  document.addEventListener = (type, listener, ...options) => {
+    if (type === "pointermove") userInputHandlers.push(listener);
+    return addListener(type, listener, ...options);
+  };
   const observers = [];
   const NativeMutationObserver = window.MutationObserver;
   window.MutationObserver = class extends NativeMutationObserver {
@@ -51,6 +58,10 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
       await new Promise(setImmediate);
     },
     poll() { pollers.forEach((callback) => callback()); },
+    userPointerMove(target) {
+      // DOM-created events are always untrusted. Exercise the native-input boundary.
+      userInputHandlers.forEach((handler) => handler({ isTrusted: true, type: "pointermove", target }));
+    },
     event(name, target = document) { target.dispatchEvent(new window.Event(name)); },
     navigate(url) {
       this.event("yt-navigate-start");
@@ -327,50 +338,109 @@ function addTimeline(page, duration = 600, currentTime = 120) {
   return { video, timeline, container: timeline.parentElement };
 }
 
-test("background skip checks never activate timeline previews or seek the video", async (t) => {
+test("timeline checks reveal and skip a prompt without leaving a thumbnail preview open", async (t) => {
   const page = setup(t, "");
   const { video, timeline, container } = addTimeline(page);
-  let now = 1000;
-  t.mock.method(page.window.Date, "now", () => now);
-  let timelineEvents = 0;
-  for (const target of [timeline, container]) {
-    for (const type of ["mouseover", "mouseenter", "mousemove", "pointerover", "pointerenter",
-      "pointermove", "mousedown", "mouseup", "pointerdown", "pointerup", "click"]) {
-      target.addEventListener(type, () => { timelineEvents += 1; });
-    }
-  }
-  for (let check = 0; check < 3; check += 1) {
-    now += 1000;
-    page.poll();
-    page.event("timeupdate", video);
-    await page.flush();
-  }
-  assert.equal(timelineEvents, 0);
-  assert.equal(video.currentTime, 120);
-  assert.equal(page.clicks, 0);
-  page.player.insertAdjacentHTML("beforeend", overlay);
-  await page.flush();
-  assert.equal(page.clicks, 1);
-  assert.equal(timelineEvents, 0);
-});
-
-test("real timeline hover still works and a resulting Jump ahead prompt is clicked only once", async (t) => {
-  const page = setup(t, "");
-  const { timeline, video } = addTimeline(page);
-  let previews = 0;
-  timeline.addEventListener("mousemove", () => {
-    previews += 1;
-    page.player.insertAdjacentHTML("beforeend", overlay);
+  const tooltip = page.document.createElement("div");
+  tooltip.className = "ytp-tooltip";
+  tooltip.style.visibility = "hidden";
+  page.player.appendChild(tooltip);
+  let hovers = 0;
+  let leaves = 0;
+  let timelineClicks = 0;
+  let entered = false;
+  container.addEventListener("mouseenter", () => { entered = true; });
+  timeline.addEventListener("mouseleave", () => {
+    leaves += 1;
+    tooltip.style.visibility = "hidden";
   });
+  timeline.addEventListener("mousemove", (event) => {
+    hovers += 1;
+    assert.equal(entered, true);
+    assert.equal(event.clientX, 260);
+    assert.equal(event.clientY, 403);
+    tooltip.style.visibility = "visible";
+    assert.equal(page.window.getComputedStyle(tooltip).display, "none");
+    page.window.queueMicrotask(() => page.player.insertAdjacentHTML("beforeend", overlay));
+  });
+  for (const type of ["mousedown", "mouseup", "pointerdown", "pointerup", "click"]) {
+    timeline.addEventListener(type, () => { timelineClicks += 1; });
+  }
   await page.flush();
-  assert.equal(previews, 0);
-  timeline.dispatchEvent(new page.window.MouseEvent("mousemove", { bubbles: true }));
-  await page.flush();
-  assert.equal(previews, 1);
+  assert.equal(hovers, 1);
+  assert.equal(leaves, 1);
+  assert.equal(timelineClicks, 0);
+  assert.equal(video.currentTime, 120);
   assert.equal(page.clicks, 1);
+  assert.equal(page.window.getComputedStyle(tooltip).display, "none");
+  // A delayed thumbnail update must remain hidden after the synthetic hover ends.
+  tooltip.style.visibility = "visible";
   page.event("seeked", video);
   page.poll();
   await page.flush();
-  assert.equal(previews, 1);
+  assert.equal(hovers, 1);
   assert.equal(page.clicks, 1);
+  assert.equal(page.window.getComputedStyle(tooltip).display, "none");
+});
+
+test("an unsuccessful timeline check sends leave events and keeps delayed previews suppressed", async (t) => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  let expireProbe;
+  const setTimeout = page.window.setTimeout.bind(page.window);
+  t.mock.method(page.window, "setTimeout", (callback, delay) => {
+    if (delay === 250) { expireProbe = callback; return -1; }
+    return setTimeout(callback, delay);
+  });
+  let hovered = false;
+  timeline.addEventListener("mouseenter", () => { hovered = true; });
+  timeline.addEventListener("mouseleave", () => { hovered = false; });
+  await page.flush();
+  assert.equal(hovered, true);
+  expireProbe();
+  assert.equal(hovered, false);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), true);
+  assert.equal(page.clicks, 0);
+  page.event("yt-navigate-start");
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+});
+
+test("genuine user input restores normal previews and hands control back without a fake leave", async (t) => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  const tooltip = page.document.createElement("div");
+  tooltip.className = "ytp-tooltip";
+  page.player.appendChild(tooltip);
+  let leaves = 0;
+  timeline.addEventListener("mouseleave", () => { leaves += 1; });
+  await page.flush();
+  assert.equal(page.window.getComputedStyle(tooltip).display, "none");
+  page.userPointerMove(timeline);
+  assert.equal(leaves, 0);
+  assert.notEqual(page.window.getComputedStyle(tooltip).display, "none");
+  let manualHover = false;
+  timeline.addEventListener("mousemove", () => {
+    manualHover = true;
+    page.player.insertAdjacentHTML("beforeend", overlay);
+  });
+  timeline.dispatchEvent(new page.window.MouseEvent("mousemove", { bubbles: true }));
+  await page.flush();
+  assert.equal(manualHover, true);
+  assert.equal(page.clicks, 1);
+  assert.notEqual(page.window.getComputedStyle(tooltip).display, "none");
+});
+
+test("a real timeline hover is left alone by background polling", async (t) => {
+  const page = setup(t, "");
+  const { timeline, container } = addTimeline(page);
+  const nativeMatches = container.matches.bind(container);
+  t.mock.method(container, "matches", (selector) => selector === ":hover" || nativeMatches(selector));
+  let fakeMoves = 0;
+  page.player.addEventListener("mousemove", () => { fakeMoves += 1; });
+  await page.flush();
+  page.poll();
+  await page.flush();
+  assert.equal(fakeMoves, 0);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+  assert.ok(timeline.isConnected);
 });

@@ -22,3 +22,8 @@ ytd-grid-video-renderer.hide-streamed-days-video {
   text-align: center;
   white-space: nowrap;
 }
+
+#movie_player.youtube-hide-timeline-probe .ytp-tooltip,
+#movie_player.youtube-hide-timeline-probe .ytp-scrubber-pull-indicator {
+  display: none !important;
+}

@@ -3,12 +3,14 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { JSDOM } = require("jsdom");
+const installSettings = require("../test-support/settings.cjs");
 
 const script = readFileSync(join(__dirname, "..", "jump-ahead.js"), "utf8");
 const overlay = readFileSync(join(__dirname, "fixtures", "jump-ahead.html"), "utf8");
 const styles = readFileSync(join(__dirname, "..", "styles.css"), "utf8");
+const uiScript = readFileSync(join(__dirname, "..", "youtube-player-ui.js"), "utf8");
 
-function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first") {
+function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first", settings = {}) {
   const dom = new JSDOM(`<style>${styles}</style><div id="movie_player"><video></video>${markup}</div>`, {
     url,
     runScripts: "outside-only"
@@ -18,7 +20,7 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
   const userInputHandlers = [];
   const addListener = document.addEventListener.bind(document);
   document.addEventListener = (type, listener, ...options) => {
-    if (type === "pointermove") userInputHandlers.push(listener);
+    userInputHandlers.push({ type, listener });
     return addListener(type, listener, ...options);
   };
   const observers = [];
@@ -45,12 +47,16 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
     return pollers.length;
   };
   document.addEventListener("click", () => { clicks += 1; });
+  const changeSettings = installSettings(window, settings);
+  document.getElementById("movie_player").showControls = () => {};
+  window.eval(uiScript);
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
 
   return {
     window,
     document,
+    changeSettings,
     get clicks() { return clicks; },
     get button() { return document.querySelector("button"); },
     get player() { return document.getElementById("movie_player"); },
@@ -60,7 +66,12 @@ function setup(t, markup = overlay, url = "https://www.youtube.com/watch?v=first
     poll() { pollers.forEach((callback) => callback()); },
     userPointerMove(target) {
       // DOM-created events are always untrusted. Exercise the native-input boundary.
-      userInputHandlers.forEach((handler) => handler({ isTrusted: true, type: "pointermove", target }));
+      userInputHandlers.filter((entry) => entry.type === "pointermove")
+        .forEach(({ listener }) => listener({ isTrusted: true, type: "pointermove", target, buttons: 0 }));
+    },
+    userEvent(type, target, extras = {}) {
+      userInputHandlers.filter((entry) => entry.type === type)
+        .forEach(({ listener }) => listener({ isTrusted: true, type, target, buttons: 0, ...extras }));
     },
     event(name, target = document) { target.dispatchEvent(new window.Event(name)); },
     navigate(url) {
@@ -433,6 +444,7 @@ test("genuine user input restores normal previews and hands control back without
 test("a real timeline hover is left alone by background polling", async (t) => {
   const page = setup(t, "");
   const { timeline, container } = addTimeline(page);
+  page.userPointerMove(timeline);
   const nativeMatches = container.matches.bind(container);
   t.mock.method(container, "matches", (selector) => selector === ":hover" || nativeMatches(selector));
   let fakeMoves = 0;
@@ -456,11 +468,11 @@ test("returning from another monitor onto the video closes fake timeline hover b
   page.userPointerMove(video);
   assert.deepEqual(leavePosition, [410, 220]);
   assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
-  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), true);
-  const latePreview = page.document.createElement("div");
-  latePreview.className = "ytp-tooltip";
-  page.player.appendChild(latePreview);
-  assert.equal(page.window.getComputedStyle(latePreview).display, "none");
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+  const manualTooltip = page.document.createElement("div");
+  manualTooltip.className = "ytp-tooltip";
+  page.player.appendChild(manualTooltip);
+  assert.notEqual(page.window.getComputedStyle(manualTooltip).display, "none");
 });
 
 test("visible-tab window blur ends fake hover and focus does not unmask delayed previews", async (t) => {
@@ -498,6 +510,7 @@ test("video-surface activity is visually suppressed before it wakes controls, ev
 test("polling leaves a real video-surface hover alone while still clicking ready skip prompts", async (t) => {
   const page = setup(t, "");
   addTimeline(page);
+  page.userPointerMove(page.document.querySelector("video"));
   const nativeMatches = page.player.matches.bind(page.player);
   t.mock.method(page.player, "matches", (selector) => selector === ":hover" || nativeMatches(selector));
   let movements = 0;
@@ -510,4 +523,215 @@ test("polling leaves a real video-surface hover alone while still clicking ready
   page.player.insertAdjacentHTML("beforeend", overlay);
   await page.flush();
   assert.equal(page.clicks, 1);
+});
+
+test("layout boundary events cannot unmask unattended title, controls, or fullscreen arrow", async (t) => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  page.player.insertAdjacentHTML("beforeend", '<div class="ytp-chrome-top">Title</div><div class="ytp-chrome-bottom"></div><div class="ytp-fullscreen-grid"></div>');
+  await page.flush();
+  for (const type of ["pointerover", "mouseover", "pointerenter", "mouseenter"]) {
+    page.userEvent(type, timeline);
+  }
+  for (const selector of [".ytp-chrome-top", ".ytp-chrome-bottom", ".ytp-fullscreen-grid"]) {
+    assert.equal(page.window.getComputedStyle(page.player.querySelector(selector)).opacity, "0");
+  }
+  page.userPointerMove(timeline);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+});
+
+test("stale CSS hover cannot block automatic checks or native player cleanup", async (t) => {
+  const page = setup(t, "");
+  const { timeline, container } = addTimeline(page);
+  for (const element of [page.player, timeline, container]) {
+    const matches = element.matches.bind(element);
+    t.mock.method(element, "matches", (selector) => selector === ":hover" || matches(selector));
+  }
+  let nativeHides = 0;
+  page.player.hideControls = () => { nativeHides += 1; };
+  timeline.addEventListener("mousemove", () => page.player.insertAdjacentHTML("beforeend", overlay));
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  assert.equal(nativeHides, 1);
+});
+
+test("stationary mouse input expires without boundary events extending its activity", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let nativeHides = 0;
+  page.player.hideControls = () => { nativeHides += 1; };
+  page.userPointerMove(video);
+  await page.flush();
+  now += 2999;
+  page.userEvent("pointerover", video);
+  page.poll();
+  await page.flush();
+  assert.equal(nativeHides, 0);
+  now += 1;
+  page.poll();
+  await page.flush();
+  assert.equal(nativeHides, 1);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+});
+
+test("held mouse input prevents probes until release and idle", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  page.userEvent("pointerdown", video, { buttons: 1 });
+  now += 10000;
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 0);
+  page.userEvent("pointerup", video);
+  now += 3000;
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 1);
+});
+
+test("pointer exit resumes automatic checks while Brave remains focused", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  page.userPointerMove(video);
+  await page.flush();
+  page.userEvent("pointerout", video, { relatedTarget: page.player });
+  now += 1000;
+  page.poll();
+  await page.flush();
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  page.userEvent("pointerout", page.player, { relatedTarget: null });
+  await page.flush();
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+});
+
+test("pausing restores native controls and does not call native hideControls", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let nativeHides = 0;
+  page.player.hideControls = () => { nativeHides += 1; };
+  await page.flush();
+  assert.equal(nativeHides, 1);
+  Object.defineProperty(video, "paused", { configurable: true, value: true });
+  page.event("pause", video);
+  page.document.dispatchEvent(new page.window.Event("youtube-hide-end-automatic-activity"));
+  assert.equal(nativeHides, 1);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+});
+
+for (const key of ["extensionEnabled", "youtubeEnabled", "youtubeAutoJumpEnabled"]) {
+  test(`${key} stops YouTube skips and hover checks, then resumes without resetting skip memory`, async (t) => {
+    const page = setup(t, "", "https://www.youtube.com/watch?v=first", { [key]: false });
+    setPlaying(page);
+    let movements = 0;
+    page.player.addEventListener("mousemove", () => { movements += 1; });
+    page.player.insertAdjacentHTML("beforeend", overlay);
+    await page.flush();
+    assert.equal(page.clicks, 0);
+    assert.equal(movements, 0);
+    page.changeSettings({ [key]: true });
+    await page.flush();
+    assert.equal(page.clicks, 1);
+    page.changeSettings({ [key]: false });
+    page.changeSettings({ [key]: true });
+    await page.flush();
+    assert.equal(page.clicks, 1);
+  });
+}
+
+test("turning YouTube auto-skip off ends an active probe and restores native UI", async (t) => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  let leaves = 0;
+  timeline.addEventListener("mouseleave", () => { leaves += 1; });
+  await page.flush();
+  page.changeSettings({ youtubeAutoJumpEnabled: false });
+  assert.equal(leaves, 1);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+});
+
+test("skip notice can be hidden without disabling YouTube auto-skip", async (t) => {
+  const page = setup(t, overlay, "https://www.youtube.com/watch?v=first", { showSkipNotice: false });
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  assert.equal(page.player.querySelector(".youtube-hide-jump-notice"), null);
+  page.changeSettings({ showSkipNotice: true });
+  page.navigate("/watch?v=next");
+  await page.flush();
+  assert.ok(page.player.querySelector(".youtube-hide-jump-notice"));
+  page.changeSettings({ showSkipNotice: false });
+  assert.equal(page.player.querySelector(".youtube-hide-jump-notice"), null);
+});
+
+for (const type of ["pointermove", "pointerdown", "click", "wheel", "keydown"]) {
+  test(`manual ${type} reenables native controls disabled by an earlier automatic check`, async (t) => {
+    const page = setup(t, "");
+    const video = setPlaying(page);
+    let disabled = false;
+    let shows = 0;
+    page.player.hideControls = () => { disabled = true; };
+    page.player.showControls = () => { disabled = false; shows += 1; };
+    await page.flush();
+    assert.equal(disabled, true);
+    page.userEvent(type, video);
+    assert.equal(disabled, false);
+    assert.equal(shows, 1);
+    assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  });
+}
+
+test("native control restoration also runs when auto-skip is turned off", async (t) => {
+  const page = setup(t, "");
+  setPlaying(page);
+  let disabled = false;
+  page.player.hideControls = () => { disabled = true; };
+  page.player.showControls = () => { disabled = false; };
+  await page.flush();
+  assert.equal(disabled, true);
+  page.changeSettings({ youtubeAutoJumpEnabled: false });
+  assert.equal(disabled, false);
+});
+
+test("native controls are never disabled when no matching restore API exists", async (t) => {
+  const page = setup(t, "");
+  setPlaying(page);
+  let hides = 0;
+  page.player.hideControls = () => { hides += 1; };
+  delete page.player.showControls;
+  await page.flush();
+  assert.equal(hides, 0);
+});
+
+test("stationary manual control-bar hover is not interrupted after the video idle timeout", async (t) => {
+  const page = setup(t, "");
+  setPlaying(page);
+  page.player.insertAdjacentHTML("beforeend", '<div class="ytp-chrome-bottom"><button>Settings</button></div>');
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  page.userPointerMove(page.player.querySelector("button"));
+  await page.flush();
+  now += 10000;
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 0);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+});
+
+test("manual input does not override native control state the extension did not hide", async (t) => {
+  const page = setup(t, "");
+  let shows = 0;
+  page.player.showControls = () => { shows += 1; };
+  await page.flush();
+  page.userPointerMove(page.player.querySelector("video"));
+  assert.equal(shows, 0);
 });

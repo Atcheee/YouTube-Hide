@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Hide",
-  "version": "1.8.3",
-  "description": "Hide YouTube clutter, auto-click Jump ahead, and skip Crunchyroll intros once per episode.",
+  "name": "Playback Plus",
+  "version": "2.0.1",
+  "description": "Player tools for YouTube and Crunchyroll: one-time auto-skip, custom playback speed, and a cleaner YouTube feed.",
   "permissions": [
     "storage",
     "activeTab"
   ],
   "action": {
-    "default_title": "YouTube Hide",
+    "default_title": "Playback Plus",
     "default_popup": "popup.html"
   },
   "background": {
@@ -16,11 +16,18 @@
   },
   "content_scripts": [
     {
+      "matches": ["*://youtube.com/*", "*://*.youtube.com/*"],
+      "js": ["youtube-player-ui.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
       "matches": [
         "*://youtube.com/*",
         "*://*.youtube.com/*"
       ],
       "js": [
+        "settings.js",
         "content.js",
         "jump-ahead.js"
       ],
@@ -34,7 +41,7 @@
         "*://crunchyroll.com/*",
         "*://*.crunchyroll.com/*"
       ],
-      "js": ["crunchyroll-skip-intro.js", "crunchyroll-playback-speed.js"],
+      "js": ["settings.js", "crunchyroll-skip-intro.js", "crunchyroll-playback-speed.js"],
       "css": ["crunchyroll.css"],
       "all_frames": true,
       "run_at": "document_idle"

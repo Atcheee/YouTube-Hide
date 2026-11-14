@@ -23,6 +23,8 @@
   let noticeVideo = null;
   let noticeTimer = null;
   let lastPath = location.pathname;
+  let enabled = false;
+  let showSkipNotice = true;
 
   function currentEpisodeId() {
     return location.pathname.match(/\/(?:watch)\/([^/]+)/)?.[1] || null;
@@ -36,6 +38,7 @@
       pendingClaims.delete(episodeId);
       return { allowed: false, episodeId, reason: "Manually skipped" };
     }
+    if (!enabled) return { allowed: false, episodeId, reason: "Auto-skip paused in settings" };
     if (skippedEpisodes.has(episodeId)) return { allowed: false, episodeId, reason: "Already skipped this episode" };
     const pending = pendingClaims.get(episodeId);
     if (pending && Date.now() - pending.time < 5000) return { allowed: false, episodeId, reason: "Skip request pending" };
@@ -152,6 +155,7 @@
 
   function showNotice(video) {
     clearNotice();
+    if (!showSkipNotice) return;
     noticeVideo = video;
     notice = document.createElement("div");
     notice.className = "youtube-hide-crunchyroll-notice";
@@ -168,6 +172,7 @@
       lastPath = location.pathname;
       clearNotice();
     }
+    if (!enabled) { diagnosticState = "Auto-skip paused in settings"; return; }
     if (claiming || Date.now() < nextClaimAt) return;
     if (isTopFrame && !currentEpisodeId()) { diagnosticState = "Watch-page episode ID unavailable"; return; }
     if (isTopFrame && skippedEpisodes.has(currentEpisodeId())) { diagnosticState = "Already skipped this episode"; return; }
@@ -186,7 +191,7 @@
         claiming = false;
         if (!response.allowed) { diagnosticState = response.reason || "Watch page rejected skip request"; return; }
         const target = playerTarget(button);
-        if (!target || location.pathname !== path || manualSkips !== manualCount ||
+        if (!enabled || !target || location.pathname !== path || manualSkips !== manualCount ||
             video.currentSrc !== source) {
           completeClaim(response, "release");
           diagnosticState = "Player changed; waiting to retry";
@@ -209,6 +214,12 @@
   }
 
   function init() {
+    PlaybackPlusSettings.subscribe((settings) => {
+      enabled = settings.extensionEnabled && settings.crunchyrollEnabled && settings.crunchyrollAutoSkipEnabled;
+      showSkipNotice = settings.showSkipNotice;
+      if (!enabled || !showSkipNotice) clearNotice();
+      scheduleScan();
+    });
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (sender.id !== chrome.runtime.id) return false;
         if (message?.type === "crunchyroll-report-status") {
@@ -217,7 +228,7 @@
             state: diagnosticState,
             buttons: findAll(BUTTON_SELECTOR).length,
             videos: findAll("video").length,
-            version: "1.7.2"
+            version: chrome.runtime.getManifest().version
           } }, () => { void chrome.runtime.lastError; });
           sendResponse({ ok: true });
         } else if (isTopFrame && message?.type === "crunchyroll-claim-intro") {
@@ -227,6 +238,8 @@
           } else {
             sendResponse(claimEpisode(message.manual === true));
           }
+        } else if (message?.type === "playback-plus-ping") {
+          sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
         } else if (message?.type === "youtube-hide-ping") {
           sendResponse({ ok: true, features: ["crunchyroll-intro"] });
         }

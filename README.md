@@ -1,13 +1,33 @@
-# YouTube Hide
+# Playback Plus
 
-Lightweight Manifest V3 extension for Brave and Chrome. It automatically hides:
+Player tools for **YouTube and Crunchyroll**, in one Manifest V3 extension for Brave
+and Chrome. Previously called YouTube Hide; updating keeps your existing settings.
+
+## Popup settings
+
+- Master switch pauses all tools without discarding preferences. Each site also has
+  its own enable switch. Changes apply to already-open supported tabs and player frames.
+- **YouTube:** toggle Jump ahead auto-skipping and the four feed filters separately.
+- **Crunchyroll:** toggle intro auto-skipping and the in-player speed picker separately.
+  Change saved speed directly in the popup with a 0.25x–4x slider and common presets;
+  it shares the same local preference as the in-player picker. Turning the picker off
+  releases speed enforcement and restores native button behavior, keeping the current rate.
+- **Both sites:** turn the centered skip notice on or off. Pausing and resuming tools
+  keeps the current page's one-time skip memory intact.
+- Current-tab connection status, a refresh button, expandable Crunchyroll player status,
+  and reset-to-defaults are included. Reset changes only this extension's preferences.
+
+The popup selects the current site's tab when opened from a supported page. Site tabs
+also support arrow keys. Settings remain available from other pages.
+
+## YouTube
+
+Automatically hides the following when their filters are enabled:
 
 - YouTube video cards whose metadata contains labels like `Streamed 1 hour ago`, `Streamed 3 days ago`, `Streamed 2 weeks ago` (any relative time unit)
 - Shorts shelves and individual Shorts cards (home feed carousels, search, recommendations, etc.)
 - Playlist Mix cards (e.g. "My Mix" with the Mix badge / radio playlist links)
 - Music videos (thumbnail duration badge with the music-note icon, including lockup cards)
-
-More hide options may be added over time.
 
 Also automatically clicks the player's visible **Jump ahead** button once per video.
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
@@ -17,12 +37,18 @@ focus. During playback, the extension sends simulated movement to the video surf
 and brief timeline hover checks to reveal Jump ahead, without moving your cursor or
 switching tabs. Timeline checks target the current playback position, suppress thumbnail
 previews, and send matching leave events after a skip or a 250 ms check window. Preview
-suppression remains until intentional timeline hover so returning to the video from another
-monitor cannot expose a stale thumbnail. Unattended checks also suppress native control bars
+suppression remains while unattended. Genuine player input ends artificial timeline hover
+and releases every mask so manual tooltips and controls remain available. Unattended checks also suppress native control bars
 and gradients, including the fullscreen Like/Dislike/Comments/Share row, so they do not blink.
-Checks close both timeline and full player hover when unattended. Real player input restores controls, and a real timeline
-hover restores previews. Checks leave an already hovered player alone and close artificial
-hover on window blur, focus changes, and tab visibility changes. Simulated movement stops
+Checks close both timeline and full player hover when unattended, then ask YouTube's native
+`hideControls()` API to finish cleanup. Real movement, button presses, or keyboard input
+remove suppression and call the matching `showControls()` API; native `hideControls()`
+otherwise keeps rendering disabled even through genuine hover. Clicks and wheel input
+also restore controls. Layout-generated over/enter events do not. Video-surface pointer
+interaction expires after three idle seconds; intentional control-bar hover and held
+mouse buttons remain protected, so stale CSS `:hover` from
+another monitor cannot keep controls awake. Artificial hover also closes on window blur,
+focus changes, and tab visibility changes. Simulated movement stops
 once that video has been skipped. The extension never clicks/drags the timeline or changes
 playback time itself.
 YouTube must accept the simulated event and expose the button; browser-frozen or
@@ -66,7 +92,8 @@ discarded tabs cannot run the content script, and background timers may be delay
 - Skips streamed-video hiding on channel **Streams** tabs (`…/streams`).
 - Skips streamed-video hiding in playlists (including Watch Later and Liked videos), Downloads (`/feed/downloads`), and History (`/feed/history`).
 - Skips Shorts hiding on the **Shorts** feed (`/shorts`).
-- Toggle each option from the extension popup; preferences are saved in sync storage.
+- Toggle each option from the extension popup; on/off preferences are saved in sync
+  storage. Crunchyroll's selected playback speed remains local to this browser.
 - Hides only matching cards/sections; it does not remove or alter videos in your account.
 - Needs the `storage` permission so the toggles can persist across sessions.
 
@@ -76,7 +103,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Reload any already-open YouTube tabs once.
+5. Reload any already-open YouTube and Crunchyroll tabs once.
 
 ## Install in Chrome
 
@@ -84,14 +111,16 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Reload any already-open YouTube tabs once.
+5. Reload any already-open YouTube and Crunchyroll tabs once.
 
 ## Files
 
-- `manifest.json`: Manifest V3 registration for YouTube pages, popup, and storage.
-- `popup.html` / `popup.js` / `popup.css`: Extension popup with hide toggles.
+- `manifest.json`: Manifest V3 registration for both sites, popup, and storage.
+- `popup.html` / `popup.js` / `popup.css`: Site settings, speed controls, and connection status.
+- `settings.js`: Shared settings defaults, initial loading, and live storage updates.
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
+- `youtube-player-ui.js`: MAIN-world companion for native player UI cleanup after probes.
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
@@ -105,7 +134,11 @@ matching YouTube's Jump ahead overlay, including rewinds and single-page navigat
 profile, checks the speed picker's real media playback timing, and verifies settings survive
 a page reload. It uses a local player fixture, not a signed-in Crunchyroll session. Set
 `CRUNCHYROLL_TEST_BROWSER` if your browser executable is not found automatically.
-`npm run test:youtube-hover` checks unattended control-bar visibility, return-to-video
-hover cleanup, manual previews, and one-time auto-skipping in an isolated Brave/Chromium
+`npm run test:youtube-hover` checks unattended title/control/arrow visibility, native
+player cleanup, layout-generated boundary events, stale CSS hover, manual previews,
+and one-time auto-skipping in an isolated Brave/Chromium
 profile with the real extension and a local player fixture. Set `YOUTUBE_TEST_BROWSER`
 if the browser executable is not found automatically.
+`npm run test:popup` verifies the real popup's saved preferences, layout bounds, live
+speed changes, master pause, and native-menu restoration against a local player fixture
+in isolated Brave/Chromium. Set `PLAYBACK_TEST_BROWSER` to override browser discovery.

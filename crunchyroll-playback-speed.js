@@ -8,6 +8,7 @@
   const STEP = 0.05;
   const PRESETS = [1, 1.25, 1.5, 1.75, 2, 3];
   const videoStates = new WeakMap();
+  const buttonAttributes = new Map();
   const observedRoots = new WeakSet();
   let videos = [];
   let buttons = [];
@@ -24,6 +25,7 @@
   let error;
   let activeButton = null;
   let lastPath = location.pathname;
+  let enabled = false;
 
   function normalizeRate(value) {
     const rate = Number(value);
@@ -72,7 +74,7 @@
   }
 
   function applyRate(video) {
-    if (!hasPreference) return;
+    if (!enabled || !hasPreference) return;
     const state = videoStates.get(video);
     if (Math.abs(video.playbackRate - selectedRate) < 0.001 &&
         Math.abs(video.defaultPlaybackRate - selectedRate) < 0.001) return;
@@ -96,8 +98,13 @@
   }
 
   function render() {
+    if (!enabled) return;
     const rate = displayedRate();
     for (const button of buttons) {
+      if (!buttonAttributes.has(button)) {
+        buttonAttributes.set(button, Object.fromEntries(["aria-haspopup", "aria-expanded", "aria-controls"]
+          .map((name) => [name, button.getAttribute(name)])));
+      }
       if (button.textContent !== formatRate(rate)) button.textContent = formatRate(rate);
       setAttribute(button, "aria-haspopup", "dialog");
       setAttribute(button, "aria-expanded", String(activeButton === button && panel && !panel.hidden));
@@ -115,6 +122,7 @@
   }
 
   function chooseRate(value, persist = true) {
+    if (!enabled) return;
     selectedRate = normalizeRate(value);
     hasPreference = true;
     selectionRevision += 1;
@@ -205,6 +213,7 @@
   }
 
   function onClick(event) {
+    if (!enabled) return;
     const button = event.composedPath().find((node) => node instanceof Element && node.matches(BUTTON_SELECTOR));
     if (!button || button.matches(':disabled, [aria-disabled="true"]')) return;
     event.preventDefault();
@@ -220,6 +229,10 @@
 
   function scan() {
     queued = false;
+    if (!enabled) return;
+    for (const button of buttonAttributes.keys()) {
+      if (!button.isConnected) buttonAttributes.delete(button);
+    }
     if (location.pathname !== lastPath) { lastPath = location.pathname; closePanel(); }
     videos = allElements("video");
     buttons = allElements(BUTTON_SELECTOR);
@@ -249,6 +262,27 @@
 
   function init() {
     observer = new MutationObserver(scheduleScan);
+    PlaybackPlusSettings.subscribe((settings) => {
+      const next = settings.extensionEnabled && settings.crunchyrollEnabled && settings.crunchyrollSpeedEnabled;
+      if (next === enabled) return;
+      enabled = next;
+      if (!enabled) {
+        closePanel();
+        for (const [button, attributes] of buttonAttributes) {
+          for (const [name, value] of Object.entries(attributes)) {
+            if (value === null) button.removeAttribute(name);
+            else button.setAttribute(name, value);
+          }
+        }
+        buttonAttributes.clear();
+      } else {
+        for (const video of videos) {
+          videoStates.get(video).attempts = 0;
+          videoStates.get(video).blocked = false;
+        }
+        scheduleScan();
+      }
+    });
     observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     document.addEventListener("click", onClick, true);
     document.addEventListener("pointerdown", (event) => {

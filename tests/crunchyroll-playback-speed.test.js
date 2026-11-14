@@ -3,12 +3,13 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { JSDOM } = require("jsdom");
+const installSettings = require("../test-support/settings.cjs");
 
 const script = readFileSync(join(__dirname, "..", "crunchyroll-playback-speed.js"), "utf8");
 const fixture = readFileSync(join(__dirname, "fixtures", "crunchyroll-speed-player.html"), "utf8");
 const KEY = "crunchyrollPlaybackSpeed";
 
-function setup(t, { saved = null, delayedStorage = false } = {}) {
+function setup(t, { saved = null, delayedStorage = false, settings = {} } = {}) {
   const dom = new JSDOM(fixture, { url: "https://www.crunchyroll.com/watch/G4VUQ2GZ7/title", runScripts: "outside-only" });
   const { window } = dom;
   const { document } = window;
@@ -36,10 +37,11 @@ function setup(t, { saved = null, delayedStorage = false } = {}) {
     onChanged: { addListener: (callback) => changes.push(callback) }
   } };
   window.setInterval = () => 1;
+  const changeSettings = installSettings(window, settings);
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return {
-    window, document, writes,
+    window, document, writes, changeSettings,
     get video() { return document.querySelector("video"); },
     get button() { return document.querySelector('[data-testid="playback-speed-button"]'); },
     get panel() { return document.getElementById("youtube-hide-crunchyroll-speed"); },
@@ -71,6 +73,32 @@ test("native speed button opens the replacement picker and presets set actual me
   assert.equal(page.panel.querySelector('[data-speed="1.5"]').getAttribute("aria-pressed"), "true");
   assert.equal(page.writes.at(-1)[KEY], 1.5);
 });
+
+for (const key of ["extensionEnabled", "crunchyrollEnabled", "crunchyrollSpeedEnabled"]) {
+  test(`${key} restores the native speed menu and stops enforcing the saved rate`, async (t) => {
+    const page = setup(t, { saved: 2, settings: { [key]: false } });
+    await page.flush();
+    let nativeClicks = 0;
+    page.button.addEventListener("click", () => { nativeClicks += 1; });
+    page.open();
+    assert.equal(nativeClicks, 1);
+    assert.equal(page.panel, null);
+    assert.equal(page.video.playbackRate, 1);
+    page.changeSettings({ [key]: true });
+    await page.flush();
+    assert.equal(page.video.playbackRate, 2);
+    page.open();
+    assert.equal(page.panel.hidden, false);
+    page.changeSettings({ [key]: false });
+    assert.equal(page.panel.hidden, true);
+    assert.equal(page.button.hasAttribute("aria-controls"), false);
+    page.video.playbackRate = 1.25;
+    page.event("ratechange", page.video);
+    assert.equal(page.video.playbackRate, 1.25);
+    page.open();
+    assert.equal(nativeClicks, 2);
+  });
+}
 
 test("slider applies custom rates immediately, saves on change, and plus/minus step by 0.05", async (t) => {
   const page = setup(t);

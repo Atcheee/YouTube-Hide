@@ -4,12 +4,13 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { runInNewContext } = require("node:vm");
 const { JSDOM } = require("jsdom");
+const installSettings = require("../test-support/settings.cjs");
 
 const script = readFileSync(join(__dirname, "..", "crunchyroll-skip-intro.js"), "utf8");
 const background = readFileSync(join(__dirname, "..", "background.js"), "utf8");
 const fixture = readFileSync(join(__dirname, "fixtures", "crunchyroll-skip-intro.html"), "utf8");
 
-function setup(t, { url = "https://www.crunchyroll.com/watch/EPISODE1/title", markup = fixture, relay } = {}) {
+function setup(t, { url = "https://www.crunchyroll.com/watch/EPISODE1/title", markup = fixture, relay, settings = {} } = {}) {
   const dom = new JSDOM(`<div id="player"><video></video>${markup}</div>`, { url, runScripts: "outside-only" });
   if (relay) dom.reconfigure({ windowTop: {} });
   const { window } = dom;
@@ -51,10 +52,11 @@ function setup(t, { url = "https://www.crunchyroll.com/watch/EPISODE1/title", ma
   window.clearTimeout = (id) => timers.delete(id);
   document.addEventListener("click", () => { clicks += 1; });
   document.addEventListener("mousemove", () => assert.fail("Crunchyroll does not need simulated hover"));
+  const changeSettings = installSettings(window, settings);
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return {
-    window, document, video, listeners, timers, messages,
+    window, document, video, listeners, timers, messages, changeSettings,
     get button() { return document.querySelector("button"); },
     get player() { return document.getElementById("player"); },
     get notice() { return document.querySelector(".youtube-hide-crunchyroll-notice"); },
@@ -104,6 +106,42 @@ test("also clicks the visible intro state", async (t) => {
   page.button.classList.replace("kat:opacity-0", "kat:opacity-100");
   await page.flush();
   assert.equal(page.clicks, 1);
+});
+
+for (const key of ["extensionEnabled", "crunchyrollEnabled", "crunchyrollAutoSkipEnabled"]) {
+  test(`${key} pauses Crunchyroll auto-skip without consuming the episode skip`, async (t) => {
+    const page = setup(t, { settings: { [key]: false } });
+    await page.flush();
+    assert.equal(page.clicks, 0);
+    page.changeSettings({ [key]: true });
+    await page.flush();
+    assert.equal(page.clicks, 1);
+    page.changeSettings({ [key]: false });
+    page.changeSettings({ [key]: true });
+    page.poll();
+    await page.flush();
+    assert.equal(page.clicks, 1);
+  });
+}
+
+test("Crunchyroll skip notice setting is independent from intro skipping", async (t) => {
+  const page = setup(t, { settings: { showSkipNotice: false } });
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  assert.equal(page.notice, null);
+});
+
+test("disabling Crunchyroll auto-skip while a frame claim is pending releases the claim", async (t) => {
+  let reply;
+  const page = setup(t, { relay: (message, callback) => {
+    if (message.action) callback({ ok: true });
+    else reply = callback;
+  } });
+  await page.flush();
+  page.changeSettings({ crunchyrollAutoSkipEnabled: false });
+  reply({ allowed: true, episodeId: "EPISODE1", token: "pending" });
+  assert.equal(page.clicks, 0);
+  assert.ok(page.messages.some((message) => message.action === "release"));
 });
 
 test("each episode gets one skip, including localized URLs and return navigation", async (t) => {
@@ -299,7 +337,7 @@ test("diagnostics report the actual reason a detected button cannot be clicked",
   assert.equal(status.buttons, 1);
   assert.equal(status.videos, 1);
   assert.equal(status.state, "Video is loading, ended, or seeking");
-  assert.equal(status.version, "1.7.2");
+  assert.equal(status.version, page.window.chrome.runtime.getManifest().version);
 });
 
 test("background diagnostics collect reports from watch and player frames", () => {

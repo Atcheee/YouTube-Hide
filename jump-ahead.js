@@ -6,6 +6,7 @@
   const BUTTON_SELECTOR = 'button, [role="button"]';
   const JUMP_AHEAD_PATTERN = /\bjump\s+ahead\b/i;
   const CHECK_INTERVAL_MS = 1000;
+  const USER_IDLE_MS = 3000;
   const PROBE_CLASS = "youtube-hide-timeline-probe";
   const QUIET_CLASS = "youtube-hide-auto-activity";
   const skippedVideos = new Set();
@@ -18,6 +19,19 @@
   let previewPlayer = null;
   let quietPlayer = null;
   let automaticPlayer = null;
+  let pointerPlayer = null;
+  let pointerPressed = false;
+  let pointerOverControls = false;
+  let lastPointerActivity = -Infinity;
+  let lastKeyboardActivity = -Infinity;
+  let enabled = false;
+  let showNotice = true;
+
+  function userIsInteracting(player) {
+    const now = Date.now();
+    return now - lastKeyboardActivity < USER_IDLE_MS ||
+      (pointerPlayer === player && (pointerPressed || pointerOverControls || now - lastPointerActivity < USER_IDLE_MS));
+  }
 
   function dispatchHover(target, type, options, bubbles = true) {
     if (type.startsWith("pointer")) {
@@ -58,12 +72,13 @@
     quietPlayer?.classList.remove(QUIET_CLASS);
     quietPlayer = null;
     automaticPlayer = null;
+    document.dispatchEvent(new Event("youtube-hide-restore-user-controls"));
   }
 
   function endPlayerActivity() {
     const player = automaticPlayer;
     automaticPlayer = null;
-    if (!player || player.matches(":hover")) return;
+    if (!player || userIsInteracting(player)) return;
     const video = player.querySelector("video");
     if (!video) return;
     const bounds = player.getBoundingClientRect();
@@ -78,6 +93,9 @@
       dispatchHover(target, "mouseleave", options, false);
       if (target === player) break;
     }
+    // The native player owns more hover UI than its visible control wrappers.
+    // A MAIN-world companion calls its API; isolated content scripts cannot.
+    document.dispatchEvent(new Event("youtube-hide-end-automatic-activity"));
   }
 
   function quietAutomaticActivity(player) {
@@ -88,6 +106,7 @@
     previewPlayer = player;
     // Apply before mouse events so unattended probes cannot flash native chrome.
     player.classList.add(QUIET_CLASS, PROBE_CLASS);
+    document.dispatchEvent(new Event("youtube-hide-begin-automatic-activity"));
   }
 
   function probeTimeline(player, video) {
@@ -96,8 +115,7 @@
     if (!timeline || timelineProbe || !Number.isFinite(video.duration) || video.duration <= 0 ||
         !Number.isFinite(video.currentTime)) return;
     const container = timeline.closest(".ytp-progress-bar-container");
-    // Let a real hover retain YouTube's normal thumbnail preview and controls.
-    if (timeline.matches(":hover") || container?.matches(":hover")) return;
+    if (userIsInteracting(player)) return;
     const bounds = timeline.getBoundingClientRect();
     if (bounds.width <= 0 || bounds.height <= 0) return;
     const inset = Math.min(1, bounds.width / 2);
@@ -108,8 +126,8 @@
       clientY: bounds.top + bounds.height / 2
     };
     const targets = container && container !== timeline ? [container, timeline] : [timeline];
-    // Keep seek-preview suppression until an intentional timeline hover, including
-    // when the user returns to another part of the video from a different monitor.
+    // Keep delayed automatic previews suppressed while unattended. Real input
+    // ends this probe and releases all masks before YouTube handles that input.
     const probe = { timeline, targets, video, options, timer: null };
     timelineProbe = probe;
     probe.timer = window.setTimeout(() => {
@@ -136,6 +154,7 @@
 
   function showJumpNotice(player) {
     clearJumpNotice();
+    if (!showNotice) return;
     jumpNotice = document.createElement("div");
     jumpNotice.className = "youtube-hide-jump-notice";
     jumpNotice.setAttribute("role", "status");
@@ -187,8 +206,7 @@
   function revealPlayerActions(player) {
     const video = player.querySelector("video");
     if (!video || video.paused || video.ended || video.seeking || video.readyState < 2) return;
-    const timeline = player.querySelector(".ytp-progress-bar-container") || player.querySelector(".ytp-progress-bar");
-    if (player.matches(":hover") || timeline?.matches(":hover")) return;
+    if (userIsInteracting(player)) return;
 
     const now = Date.now();
     if (now - lastPlayerActivity < CHECK_INTERVAL_MS) return;
@@ -212,7 +230,7 @@
   function tryJumpAhead() {
     scanQueued = false;
     const videoId = currentVideoId();
-    if (navigating || !videoId || skippedVideos.has(videoId)) return;
+    if (!enabled || navigating || !videoId || skippedVideos.has(videoId)) return;
 
     const player = document.getElementById("movie_player");
     if (!player) return;
@@ -222,7 +240,7 @@
       revealPlayerActions(player);
       button = availableJumpButton(player);
     }
-    if (!button || navigating || currentVideoId() !== videoId || skippedVideos.has(videoId)) {
+    if (!enabled || !button || navigating || currentVideoId() !== videoId || skippedVideos.has(videoId)) {
       if (!timelineProbe) endPlayerActivity();
       return;
     }
@@ -236,7 +254,7 @@
 
   function scheduleScan() {
     const videoId = currentVideoId();
-    if (navigating || !videoId || skippedVideos.has(videoId) || scanQueued) return;
+    if (!enabled || navigating || !videoId || skippedVideos.has(videoId) || scanQueued) return;
     // Animation frames may stop in background tabs. Microtasks still run when
     // playback events, DOM mutations or our fallback timer wake the page.
     scanQueued = true;
@@ -244,6 +262,18 @@
   }
 
   function init() {
+    PlaybackPlusSettings.subscribe((settings) => {
+      enabled = settings.extensionEnabled && settings.youtubeEnabled && settings.youtubeAutoJumpEnabled;
+      showNotice = settings.showSkipNotice;
+      if (!showNotice) clearJumpNotice();
+      if (!enabled) {
+        endTimelineProbe();
+        endPlayerActivity();
+        restoreUserPreviews();
+        restoreUserControls();
+        clearJumpNotice();
+      } else scheduleScan();
+    });
     new MutationObserver(scheduleScan).observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -254,6 +284,10 @@
 
     document.addEventListener("yt-navigate-start", () => {
       navigating = true;
+      pointerPlayer = null;
+      pointerPressed = false;
+      pointerOverControls = false;
+      lastKeyboardActivity = -Infinity;
       endTimelineProbe();
       endPlayerActivity();
       restoreUserPreviews();
@@ -266,6 +300,10 @@
     });
     window.addEventListener("popstate", scheduleScan);
     function endInactiveHover() {
+      pointerPlayer = null;
+      pointerPressed = false;
+      pointerOverControls = false;
+      lastKeyboardActivity = -Infinity;
       endTimelineProbe();
       endPlayerActivity();
       lastPlayerActivity = Date.now();
@@ -276,20 +314,52 @@
     document.addEventListener("visibilitychange", () => { endInactiveHover(); scheduleScan(); });
     window.addEventListener("focus", () => { endInactiveHover(); scheduleScan(); });
     window.setInterval(scheduleScan, CHECK_INTERVAL_MS);
-    for (const event of ["pointermove", "mousemove", "pointerover", "mouseover", "pointerdown", "mousedown", "keydown"]) {
+    // Boundary events can be trusted even when caused only by layout changes.
+    // They must never count as physical movement or unmask automatic controls.
+    for (const event of ["pointermove", "mousemove", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "wheel", "keydown"]) {
       document.addEventListener(event, (input) => {
         if (!input.isTrusted) return;
-        if (input.type !== "keydown" &&
-            !(input.target instanceof Element && input.target.closest("#movie_player"))) return;
+        const targetPlayer = input.target instanceof Element ? input.target.closest("#movie_player") : null;
+        if (input.type === "keydown") lastKeyboardActivity = Date.now();
+        else {
+          pointerPlayer = targetPlayer;
+          pointerPressed = Boolean(input.buttons & 1);
+          pointerOverControls = Boolean(targetPlayer && input.target.closest(
+            ".ytp-chrome-bottom, .ytp-chrome-top, .ytp-progress-bar-container, .ytp-progress-bar, .ytp-popup, .ytp-fullscreen-quick-actions, .ytp-fullscreen-grid"));
+          lastPointerActivity = Date.now();
+          if (!targetPlayer) { scheduleScan(); return; }
+        }
         const overTimeline = input.type !== "keydown" && input.target instanceof Element &&
           input.target.closest(".ytp-progress-bar-container, .ytp-progress-bar");
         // A return to the video surface must close the artificial timeline hover.
-        // Only an intentional timeline hover should expose native seek previews.
+        // Hand every native tooltip and control back to real user input.
         endTimelineProbe(!overTimeline);
         if (!overTimeline) endPlayerActivity();
         restoreUserControls();
-        if (overTimeline) restoreUserPreviews();
+        restoreUserPreviews();
         lastPlayerActivity = Date.now();
+      }, true);
+    }
+    for (const event of ["pointerout", "mouseout", "pointerleave", "mouseleave", "pointercancel"]) {
+      document.addEventListener(event, (input) => {
+        if (!input.isTrusted) return;
+        const player = input.target instanceof Element ? input.target.closest("#movie_player") : pointerPlayer;
+        if (!player && input.target !== document && input.target !== document.documentElement) return;
+        if (input.relatedTarget instanceof Node && player?.contains(input.relatedTarget)) return;
+        pointerPlayer = null;
+        pointerPressed = false;
+        pointerOverControls = false;
+        endTimelineProbe();
+        endPlayerActivity();
+        scheduleScan();
+      }, true);
+    }
+    for (const event of ["pause", "ended"]) {
+      document.addEventListener(event, (input) => {
+        if (!(input.target instanceof HTMLVideoElement) || !input.target.closest("#movie_player")) return;
+        endTimelineProbe();
+        endPlayerActivity();
+        restoreUserControls();
       }, true);
     }
     // Also catch visibility changes caused by playback or CSS transitions.

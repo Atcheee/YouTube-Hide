@@ -32,6 +32,7 @@ ytd-grid-video-renderer.hide-streamed-days-video {
 #movie_player.youtube-hide-auto-activity .ytp-chrome-top,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-bottom,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-top,
-#movie_player.youtube-hide-auto-activity .ytp-fullscreen-quick-actions {
+#movie_player.youtube-hide-auto-activity .ytp-fullscreen-quick-actions,
+#movie_player.youtube-hide-auto-activity .ytp-fullscreen-grid {
   opacity: 0 !important;
 }

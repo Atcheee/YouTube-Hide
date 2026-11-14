@@ -1,10 +1,11 @@
 {
-  "name": "youtube-hide",
+  "name": "playback-plus",
   "private": true,
   "scripts": {
     "test": "node --test",
     "test:browser": "node scripts/verify-crunchyroll-speed.cjs",
-    "test:youtube-hover": "node scripts/verify-youtube-hover.cjs"
+    "test:youtube-hover": "node scripts/verify-youtube-hover.cjs",
+    "test:popup": "node scripts/verify-popup.cjs"
   },
   "devDependencies": {
     "jsdom": "^27.2.0",

@@ -3,38 +3,70 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>YouTube Hide</title>
+    <title>Playback Plus</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main class="panel">
-      <h1 class="title">YouTube Hide</h1>
-      <p class="subtitle">Hide streamed videos, Shorts, and more</p>
-      <p id="refresh-hint" class="refresh-hint" hidden>
-        Reload the extension, then refresh this tab to apply updates.
-      </p>
-      <p id="crunchyroll-status" class="crunchyroll-status" role="status" hidden></p>
-      <label class="toggle" for="streamed-toggle">
-        <span class="toggle-label">Hide streamed videos</span>
-        <input id="streamed-toggle" type="checkbox" checked />
-        <span class="switch" aria-hidden="true"></span>
-      </label>
-      <label class="toggle" for="shorts-toggle">
-        <span class="toggle-label">Hide Shorts</span>
-        <input id="shorts-toggle" type="checkbox" checked />
-        <span class="switch" aria-hidden="true"></span>
-      </label>
-      <label class="toggle" for="mix-toggle">
-        <span class="toggle-label">Hide playlist Mixes</span>
-        <input id="mix-toggle" type="checkbox" checked />
-        <span class="switch" aria-hidden="true"></span>
-      </label>
-      <label class="toggle" for="music-toggle">
-        <span class="toggle-label">Hide music videos</span>
-        <input id="music-toggle" type="checkbox" checked />
-        <span class="switch" aria-hidden="true"></span>
-      </label>
+      <header class="header">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 5 10 7-10 7V5Z" fill="currentColor"/><path d="M19 4v6m-3-3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+        <div><h1>Playback Plus</h1><p class="subtitle">Your player, your preferences.</p></div>
+        <label class="master-toggle" title="Enable Playback Plus">
+          <input id="master-toggle" data-setting="extensionEnabled" type="checkbox" role="switch" aria-label="Enable Playback Plus" disabled />
+          <span class="switch" aria-hidden="true"></span>
+        </label>
+      </header>
+
+      <section class="connection" aria-label="Current tab">
+        <span id="connection-dot" class="connection-dot" aria-hidden="true"></span>
+        <div class="connection-copy"><strong id="site-status">Checking current tab…</strong><span id="site-detail">Settings apply to all supported tabs.</span></div>
+        <button id="refresh-tab" class="icon-button" type="button" aria-label="Refresh current video tab" title="Refresh current video tab" hidden><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 7v5h-5M19 12a7 7 0 1 1-1.8-4.7L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </section>
+      <p id="refresh-hint" class="hint" hidden>Refresh this tab to connect the updated player tools.</p>
+      <p id="paused-hint" class="hint" hidden>Playback Plus is paused. Your preferences are saved.</p>
+
+      <div class="site-tabs" role="tablist" aria-label="Site settings">
+        <button id="youtube-tab" type="button" role="tab" aria-selected="true" aria-controls="youtube-panel" data-site="youtube"><span class="site-symbol youtube-symbol" aria-hidden="true">▶</span>YouTube</button>
+        <button id="crunchyroll-tab" type="button" role="tab" aria-selected="false" aria-controls="crunchyroll-panel" tabindex="-1" data-site="crunchyroll"><span class="site-symbol crunchyroll-symbol" aria-hidden="true">C</span>Crunchyroll</button>
+      </div>
+
+      <section id="youtube-panel" class="site-panel" role="tabpanel" aria-labelledby="youtube-tab">
+        <label class="toggle site-enable"><span><strong>Enable YouTube tools</strong><small>Filtering and one-time auto-skip</small></span><input data-setting="youtubeEnabled" type="checkbox" role="switch" disabled /><span class="switch" aria-hidden="true"></span></label>
+        <fieldset id="youtube-options" class="settings-group" disabled>
+          <legend>Player</legend>
+          <label class="toggle"><span><strong>Auto “Jump ahead”</strong><small>Skip once per video. Rewinds stay yours.</small></span><input data-setting="youtubeAutoJumpEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <p class="group-label">Clean up your feed</p>
+          <label class="toggle compact"><span>Hide streamed videos</span><input id="streamed-toggle" data-setting="hideStreamedEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact"><span>Hide Shorts</span><input id="shorts-toggle" data-setting="hideShortsEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact"><span>Hide playlist Mixes</span><input id="mix-toggle" data-setting="hideMixEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact"><span>Hide music videos</span><input id="music-toggle" data-setting="hideMusicEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+        </fieldset>
+      </section>
+
+      <section id="crunchyroll-panel" class="site-panel" role="tabpanel" aria-labelledby="crunchyroll-tab" hidden>
+        <label class="toggle site-enable"><span><strong>Enable Crunchyroll tools</strong><small>Intro skipping and playback speed</small></span><input data-setting="crunchyrollEnabled" type="checkbox" role="switch" disabled /><span class="switch" aria-hidden="true"></span></label>
+        <fieldset id="crunchyroll-options" class="settings-group" disabled>
+          <legend>Player</legend>
+          <label class="toggle"><span><strong>Auto “Skip Intro”</strong><small>Once per episode, even without hovering.</small></span><input data-setting="crunchyrollAutoSkipEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle"><span><strong>In-player speed picker</strong></span><input data-setting="crunchyrollSpeedEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <fieldset id="speed-controls" class="speed-card" disabled>
+            <legend>Saved playback speed</legend>
+            <div class="speed-heading"><label for="playback-speed">Playback speed</label><output id="speed-value" for="playback-speed">1x</output></div>
+            <input id="playback-speed" type="range" min="0.25" max="4" step="0.05" value="1" aria-label="Crunchyroll playback speed" />
+            <div class="speed-presets" aria-label="Speed presets"><button type="button" data-speed="1">1x</button><button type="button" data-speed="1.25">1.25x</button><button type="button" data-speed="1.5">1.5x</button><button type="button" data-speed="2">2x</button></div>
+            <p class="speed-note">Saved for every episode. Use one speed extension at a time.</p>
+          </fieldset>
+        </fieldset>
+        <details id="diagnostics" hidden><summary>Player status</summary><p id="crunchyroll-status" class="diagnostic-copy"></p><button id="check-status" class="text-button" type="button">Check again</button></details>
+      </section>
+
+      <fieldset id="general-options" class="general-options" disabled>
+        <legend>Both sites</legend>
+        <label class="toggle"><span><strong>Show “Jumped ahead” notice</strong></span><input data-setting="showSkipNotice" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+      </fieldset>
+      <footer><button id="reset-settings" class="text-button" type="button" disabled>Reset settings</button><span id="save-status" role="status" aria-live="polite">Loading settings…</span><span id="version" class="version"></span></footer>
     </main>
+    <script src="settings.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

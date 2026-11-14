@@ -2,10 +2,6 @@
   "use strict";
 
   const HIDDEN_CLASS = "hide-streamed-days-video";
-  const STREAMED_STORAGE_KEY = "hideStreamedEnabled";
-  const SHORTS_STORAGE_KEY = "hideShortsEnabled";
-  const MIX_STORAGE_KEY = "hideMixEnabled";
-  const MUSIC_STORAGE_KEY = "hideMusicEnabled";
   // Matches metadata like "Streamed 1 hour ago", "Streamed 3 days ago", etc.
   const STREAMED_AGO_PATTERN =
     /\bStreamed\s+\d[\d,.]*\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b/i;
@@ -36,10 +32,10 @@
   const pendingCards = new Set();
   const pendingSections = new Set();
   let scanFrame = null;
-  let hideStreamedEnabled = true;
-  let hideShortsEnabled = true;
-  let hideMixEnabled = true;
-  let hideMusicEnabled = true;
+  let hideStreamedEnabled = false;
+  let hideShortsEnabled = false;
+  let hideMixEnabled = false;
+  let hideMusicEnabled = false;
   let lastPathname = location.pathname;
 
   function isStreamsPage() {
@@ -326,53 +322,10 @@
   }
 
   function init() {
-    chrome.storage.sync.get(
-      {
-        [STREAMED_STORAGE_KEY]: true,
-        [SHORTS_STORAGE_KEY]: true,
-        [MIX_STORAGE_KEY]: true,
-        [MUSIC_STORAGE_KEY]: true
-      },
-      (result) => {
-        applySettings(
-          result[STREAMED_STORAGE_KEY],
-          result[SHORTS_STORAGE_KEY],
-          result[MIX_STORAGE_KEY],
-          result[MUSIC_STORAGE_KEY]
-        );
-      }
-    );
-
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== "sync") return;
-
-      let nextStreamed = hideStreamedEnabled;
-      let nextShorts = hideShortsEnabled;
-      let nextMix = hideMixEnabled;
-      let nextMusic = hideMusicEnabled;
-      let changed = false;
-
-      if (Object.hasOwn(changes, STREAMED_STORAGE_KEY)) {
-        nextStreamed = changes[STREAMED_STORAGE_KEY].newValue !== false;
-        changed = true;
-      }
-
-      if (Object.hasOwn(changes, SHORTS_STORAGE_KEY)) {
-        nextShorts = changes[SHORTS_STORAGE_KEY].newValue !== false;
-        changed = true;
-      }
-
-      if (Object.hasOwn(changes, MIX_STORAGE_KEY)) {
-        nextMix = changes[MIX_STORAGE_KEY].newValue !== false;
-        changed = true;
-      }
-
-      if (Object.hasOwn(changes, MUSIC_STORAGE_KEY)) {
-        nextMusic = changes[MUSIC_STORAGE_KEY].newValue !== false;
-        changed = true;
-      }
-
-      if (changed) applySettings(nextStreamed, nextShorts, nextMix, nextMusic);
+    PlaybackPlusSettings.subscribe((settings) => {
+      const enabled = settings.extensionEnabled && settings.youtubeEnabled;
+      applySettings(enabled && settings.hideStreamedEnabled, enabled && settings.hideShortsEnabled,
+        enabled && settings.hideMixEnabled, enabled && settings.hideMusicEnabled);
     });
 
     observer.observe(document.documentElement, {
@@ -385,6 +338,10 @@
     window.addEventListener("popstate", handleNavigation);
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type === "playback-plus-ping") {
+        sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
+        return false;
+      }
       if (message?.type === "youtube-hide-ping") {
         sendResponse({ ok: true, features: ["streamed", "shorts", "mix", "music", "jump-ahead"] });
         return true;

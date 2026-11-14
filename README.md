@@ -66,6 +66,14 @@ discarded tabs cannot run the content script, and background timers may be delay
 
 ## Crunchyroll
 
+- Optional **5-second rewind/forward** switch sets the player's rewind/forward buttons
+  and left/right arrows to five seconds. Button labels and icons show the new interval.
+  A separate **Enable J/K/L shortcuts** switch enables J/L for ten seconds back/forward
+  and K for pause/play. Both switches start off and work independently; turning either
+  off restores the corresponding native behavior. Typing,
+  sliders, menus and modified shortcuts keep their normal behavior. Works in player
+  frames, fullscreen and replacement players; seeks stay within the playable range.
+
 - Replaces the in-player **1x** playback-speed menu with a YouTube-style slider,
   0.05x minus/plus controls, and 1x, 1.25x, 1.5x, 1.75x, 2x, and 3x presets.
   Speeds range from 0.25x to 4x. Controls change the actual media playback rate;
@@ -130,7 +138,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `manifest.json`: Manifest V3 registration for both sites, popup, and storage.
 - `popup.html` / `popup.js` / `popup.css`: Site settings, speed controls, and connection status.
 - `settings.js`: Shared settings defaults, initial loading, and live storage updates.
-- `icons/`: Shared play-and-plus icon for the toolbar, extension manager, and popup.
+- `icons/`: Amber fast-forward icon for the toolbar, extension manager, and popup.
   Run `npm run build:icons` to regenerate PNG sizes from the SVG source.
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
 - `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
@@ -138,6 +146,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
+- `crunchyroll-seek.js`: Optional five-second seek buttons and keyboard shortcuts.
 - `background.js`: Relays player-frame skip claims to the watch page's episode memory.
 
 ## Tests

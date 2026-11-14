@@ -49,6 +49,7 @@ legend, .group-label { margin: 0; padding: 0; font-size: 10px; color: var(--mute
 .toggle small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
 .toggle.compact { padding: 5px 0; font-size: 12px; }
 #youtube-options .toggle.compact { padding: 3px 0; }
+#crunchyroll-options > .toggle { padding: 4px 0; }
 .site-enable { border-bottom: 1px solid var(--line); padding-top: 1px; padding-bottom: 10px; }
 .toggle input, .master-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .switch { position: relative; display: inline-block; width: 34px; height: 20px; border-radius: 999px; background: var(--track); flex-shrink: 0; transition: background .15s; vertical-align: middle; }
@@ -57,15 +58,15 @@ input:checked + .switch { background: var(--accent); }
 input:checked + .switch::after { transform: translateX(14px); background: #1a2040; }
 input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 3px; }
 .toggle:has(input:disabled), .master-toggle:has(input:disabled), fieldset:disabled .speed-heading, fieldset:disabled .speed-presets, fieldset:disabled input[type="range"] { opacity: .45; cursor: default; }
-.speed-card { margin-top: 4px; border-radius: 10px; padding: 8px; background: var(--panel); }
+.speed-card { margin-top: 4px; border-radius: 10px; padding: 6px; background: var(--panel); }
 .speed-card > legend { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
 .speed-heading { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
 .speed-heading output { font-size: 17px; font-weight: 700; color: #ced5ff; }
-input[type="range"] { width: 100%; margin: 10px 0; accent-color: var(--accent); cursor: pointer; }
+input[type="range"] { width: 100%; margin: 6px 0; accent-color: var(--accent); cursor: pointer; }
 .speed-presets { display: flex; gap: 6px; }
 .speed-presets button { flex: 1; border: 1px solid transparent; border-radius: 7px; padding: 5px; background: var(--raised); color: var(--fg); font-size: 11px; }
 .speed-presets button[aria-pressed="true"] { border-color: var(--accent); background: #343c63; color: #e3e7ff; }
-.speed-note { font-size: 10px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+.speed-note { font-size: 10px; color: var(--muted); line-height: 1.5; margin: 6px 0 0; }
 .general-options { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 4px; }
 .general-options > legend { padding-right: 8px; }
 details { padding-top: 8px; color: var(--muted); font-size: 11px; }

@@ -19,6 +19,8 @@
     youtubeWatchLaterShortcutEnabled: true,
     crunchyrollAutoSkipEnabled: true,
     crunchyrollSpeedEnabled: true,
+    crunchyrollFiveSecondSeekEnabled: false,
+    crunchyrollKeyboardShortcutsEnabled: false,
     showSkipNotice: true,
     hideStreamedEnabled: true,
     hideShortsEnabled: true,
@@ -55,7 +57,7 @@
     for (const key of Object.keys(defaults)) {
       if (!Object.hasOwn(changes, key)) continue;
       changedDuringLoad.add(key);
-      state[key] = changes[key].newValue !== false;
+      state[key] = (changes[key].newValue ?? defaults[key]) !== false;
       changed = true;
     }
     if (ready && changed) notify();
@@ -64,7 +66,7 @@
     // A popup change can arrive before the initial storage read completes.
     const failed = Boolean(chrome.runtime?.lastError);
     for (const key of Object.keys(defaults)) {
-      if (!changedDuringLoad.has(key)) state[key] = failed ? defaults[key] : result?.[key] !== false;
+      if (!changedDuringLoad.has(key)) state[key] = failed ? defaults[key] : (result?.[key] ?? defaults[key]) !== false;
     }
     ready = true;
     notify();

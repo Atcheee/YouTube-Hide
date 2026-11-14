@@ -22,11 +22,17 @@ test("settings wait for storage and preserve changes arriving during the initial
   assert.equal(received[0].extensionEnabled, false);
   assert.equal(received[0].hideShortsEnabled, false);
   assert.equal(received[0].youtubeAutoJumpEnabled, true);
+  assert.equal(received[0].crunchyrollFiveSecondSeekEnabled, false);
+  change({ crunchyrollFiveSecondSeekEnabled: { newValue: true } }, "sync");
+  assert.equal(received.at(-1).crunchyrollFiveSecondSeekEnabled, true);
+  change({ crunchyrollFiveSecondSeekEnabled: {} }, "sync");
+  assert.equal(received.at(-1).crunchyrollFiveSecondSeekEnabled, false);
   change({ extensionEnabled: {} }, "sync");
-  assert.equal(received[1].extensionEnabled, true);
+  assert.equal(received.at(-1).extensionEnabled, true);
+  const count = received.length;
   unsubscribe();
   change({ youtubeEnabled: { newValue: false } }, "sync");
-  assert.equal(received.length, 2);
+  assert.equal(received.length, count);
 });
 
 test("reinjecting settings preserves subscribers and module installation state", () => {

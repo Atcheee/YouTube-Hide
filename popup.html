@@ -45,17 +45,19 @@
       </section>
 
       <section id="crunchyroll-panel" class="site-panel" role="tabpanel" aria-labelledby="crunchyroll-tab" hidden>
-        <label class="toggle site-enable"><span><strong>Enable Crunchyroll tools</strong><small>Intro skipping and playback speed</small></span><input data-setting="crunchyrollEnabled" type="checkbox" role="switch" disabled /><span class="switch" aria-hidden="true"></span></label>
+        <label class="toggle site-enable"><span><strong>Enable Crunchyroll tools</strong></span><input data-setting="crunchyrollEnabled" type="checkbox" role="switch" disabled /><span class="switch" aria-hidden="true"></span></label>
         <fieldset id="crunchyroll-options" class="settings-group" disabled>
           <legend>Player</legend>
-          <label class="toggle"><span><strong>Auto “Skip Intro”</strong><small>Once per episode, even without hovering.</small></span><input data-setting="crunchyrollAutoSkipEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle"><span><strong>Auto “Skip Intro”</strong></span><input data-setting="crunchyrollAutoSkipEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact" title="Rewind/forward buttons and left/right arrows use 5 seconds"><span>5-second rewind/forward</span><input data-setting="crunchyrollFiveSecondSeekEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact" title="J: back 10s. K: pause/play. L: forward 10s."><span>Enable J/K/L shortcuts</span><input data-setting="crunchyrollKeyboardShortcutsEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
           <label class="toggle"><span><strong>In-player speed picker</strong></span><input data-setting="crunchyrollSpeedEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
           <fieldset id="speed-controls" class="speed-card" disabled>
             <legend>Saved playback speed</legend>
             <div class="speed-heading"><label for="playback-speed">Playback speed</label><output id="speed-value" for="playback-speed">1x</output></div>
             <input id="playback-speed" type="range" min="0.25" max="4" step="0.05" value="1" aria-label="Crunchyroll playback speed" />
             <div class="speed-presets" aria-label="Speed presets"><button type="button" data-speed="1">1x</button><button type="button" data-speed="1.25">1.25x</button><button type="button" data-speed="1.5">1.5x</button><button type="button" data-speed="2">2x</button></div>
-            <p class="speed-note">Saved for every episode. Use one speed extension at a time.</p>
+            <p class="speed-note">Saved per episode. Use one speed extension.</p>
           </fieldset>
         </fieldset>
         <details id="diagnostics" hidden><summary>Player status</summary><p id="crunchyroll-status" class="diagnostic-copy"></p><button id="check-status" class="text-button" type="button">Check again</button></details>

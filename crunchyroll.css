@@ -1,3 +1,13 @@
+.playback-plus-five-second-seek {
+  position: relative;
+  font-size: 0 !important;
+}
+.playback-plus-five-second-seek > :not(.playback-plus-seek-icon) { visibility: hidden !important; }
+.playback-plus-seek-icon { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.playback-plus-seek-icon svg { width: 24px; height: 24px; color: inherit; }
+.playback-plus-seek-icon path { fill: none; stroke: currentColor; stroke-width: 1.8; }
+.playback-plus-seek-icon text { fill: currentColor; font: 600 11px Arial, sans-serif; text-anchor: middle; }
+
 .youtube-hide-crunchyroll-notice {
   position: fixed;
   transform: translate(-50%, -50%);

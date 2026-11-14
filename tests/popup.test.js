@@ -204,3 +204,23 @@ test("healthy tabs skip injection and failed recovery keeps a manual fallback", 
   assert.equal(failed.element("refresh-hint").hidden, false);
   assert.equal(failed.reloads.length, 0);
 });
+
+test("five-second seeking switch is opt-in, saved and reset independently", t => {
+  const page = setup(t, { url: "https://www.crunchyroll.com/watch/episode" });
+  const toggle = page.input("crunchyrollFiveSecondSeekEnabled");
+  assert.equal(toggle.checked, false);
+  const shortcuts = page.input("crunchyrollKeyboardShortcutsEnabled");
+  assert.equal(shortcuts.checked, false);
+  shortcuts.click();
+  assert.equal(page.values.sync.crunchyrollKeyboardShortcutsEnabled, true);
+  toggle.click();
+  assert.equal(page.values.sync.crunchyrollFiveSecondSeekEnabled, true);
+  shortcuts.click();
+  assert.equal(page.values.sync.crunchyrollKeyboardShortcutsEnabled, false);
+  assert.equal(toggle.checked, true);
+  page.input("crunchyrollEnabled").click();
+  assert.equal(toggle.matches(":disabled"), true);
+  page.element("reset-settings").click();
+  assert.equal(toggle.checked, false);
+  assert.equal(shortcuts.checked, false);
+});

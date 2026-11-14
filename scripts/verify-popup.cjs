@@ -39,7 +39,7 @@ const assert = require("node:assert/strict");
     async function capture(site) {
       sizes[site] = await popup.evaluate(() => ({ width: document.body.scrollWidth, height: document.body.scrollHeight }));
       assert.equal(sizes[site].width, 376, "Popup must not overflow horizontally");
-      assert.ok(sizes[site].height <= 600, "Default popup settings must fit within 600px");
+      assert.ok(sizes[site].height <= 600, `Default ${site} popup settings must fit within 600px; got ${sizes[site].height}px`);
       await popup.setViewportSize({ width: 376, height: sizes[site].height });
       await popup.screenshot({ path: join(images, `${site}.png`), fullPage: true, animations: "disabled" });
     }

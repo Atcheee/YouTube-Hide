@@ -52,6 +52,16 @@ function silentWave(seconds) {
     await page.evaluate((source) => { document.querySelector("video").src = source; }, silentWave(12));
     await page.waitForFunction(() => document.querySelector("video").readyState >= 2);
     await page.getByTestId("playback-speed-button").click();
+    const header = await page.locator(".youtube-hide-speed-header").evaluate((element) => {
+      const button = element.querySelector("button").getBoundingClientRect();
+      const title = element.querySelector("h2").getBoundingClientRect();
+      return { height: element.getBoundingClientRect().height, buttonWidth: button.width,
+        buttonHeight: button.height, centerDifference: Math.abs(button.y + button.height / 2 - title.y - title.height / 2) };
+    });
+    assert.equal(header.height, 56);
+    assert.equal(header.buttonWidth, 32);
+    assert.equal(header.buttonHeight, 32);
+    assert.ok(header.centerDifference < 1);
     await page.getByRole("button", { name: "2 times normal speed", exact: true }).click();
     assert.equal(await page.locator("video").evaluate((video) => video.playbackRate), 2);
     const start = await page.locator("video").evaluate(async (video) => {
@@ -73,9 +83,25 @@ function silentWave(seconds) {
     await page.reload();
     await page.waitForFunction(() => document.querySelector("video").playbackRate === 1.25);
     assert.equal(await page.getByTestId("playback-speed-button").textContent(), "1.25x");
+    // Match Crunchyroll Speeder's observed behavior: every player DOM update
+    // reapplies its saved 1.3x value, regardless of the in-player selection.
+    await page.evaluate(() => {
+      window.competingSpeeder = new MutationObserver(() => { document.querySelector("video").playbackRate = 1.3; });
+      window.competingSpeeder.observe(document.body, { attributes: true, childList: true, subtree: true });
+      window.playerTicks = setInterval(() => { document.body.dataset.playerTick = String(performance.now()); }, 50);
+    });
+    await page.getByTestId("playback-speed-button").click();
+    await page.getByRole("button", { name: "2 times normal speed", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector(".youtube-hide-speed-error").textContent.includes("Disable Crunchyroll Speeder"));
+    assert.equal(await page.locator("video").evaluate((video) => video.playbackRate), 1.3);
+    await page.evaluate(() => { competingSpeeder.disconnect(); clearInterval(playerTicks); });
+    await page.getByRole("button", { name: "1.75 times normal speed", exact: true }).click();
+    assert.equal(await page.locator("video").evaluate((video) => video.playbackRate), 1.75);
+    assert.equal(await page.locator(".youtube-hide-speed-error").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ browser: executablePath, extensionLoaded: true,
-      measuredPlayback: `${ratio.toFixed(2)}x`, restoredAfterReload: "1.25x", screenshot }));
+      measuredPlayback: `${ratio.toFixed(2)}x`, restoredAfterReload: "1.25x",
+      competingExtensionDetected: true, recoveredAfterDisabling: "1.75x", screenshot }));
   } finally {
     await context.close();
   }

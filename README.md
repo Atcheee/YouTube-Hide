@@ -17,9 +17,14 @@ focus. During playback, the extension sends simulated movement to the video surf
 and brief timeline hover checks to reveal Jump ahead, without moving your cursor or
 switching tabs. Timeline checks target the current playback position, suppress thumbnail
 previews, and send matching leave events after a skip or a 250 ms check window. Preview
-suppression remains until real pointer or keyboard input so delayed thumbnails stay hidden;
-real timeline hover keeps normal previews. Simulated movement stops once that video has
-been skipped. The extension never clicks/drags the timeline or changes playback time itself.
+suppression remains until intentional timeline hover so returning to the video from another
+monitor cannot expose a stale thumbnail. Unattended checks also suppress native control bars
+and gradients, including the fullscreen Like/Dislike/Comments/Share row, so they do not blink.
+Checks close both timeline and full player hover when unattended. Real player input restores controls, and a real timeline
+hover restores previews. Checks leave an already hovered player alone and close artificial
+hover on window blur, focus changes, and tab visibility changes. Simulated movement stops
+once that video has been skipped. The extension never clicks/drags the timeline or changes
+playback time itself.
 YouTube must accept the simulated event and expose the button; browser-frozen or
 discarded tabs cannot run the content script, and background timers may be delayed.
 
@@ -30,6 +35,9 @@ discarded tabs cannot run the content script, and background timers may be delay
   Speeds range from 0.25x to 4x. Controls change the actual media playback rate;
   selection is saved locally and restored for subsequent episodes and player reloads.
   The picker supports keyboard controls, fullscreen, and dynamic player replacement.
+  Disable separate speed controllers such as **Crunchyroll Speeder** when using it:
+  those extensions can continuously restore their own saved rate. The picker detects
+  repeated resets, stops fighting the other controller, and displays an actionable message.
 - Automatically clicks **Skip Intro** on `crunchyroll.com`, including inside player
   frames. Matches the button's exact label, text, and `skip-intro-icon` marker.
 - Works with the supplied unhovered state (`aria-hidden="true"`, opacity zero,
@@ -97,3 +105,7 @@ matching YouTube's Jump ahead overlay, including rewinds and single-page navigat
 profile, checks the speed picker's real media playback timing, and verifies settings survive
 a page reload. It uses a local player fixture, not a signed-in Crunchyroll session. Set
 `CRUNCHYROLL_TEST_BROWSER` if your browser executable is not found automatically.
+`npm run test:youtube-hover` checks unattended control-bar visibility, return-to-video
+hover cleanup, manual previews, and one-time auto-skipping in an isolated Brave/Chromium
+profile with the real extension and a local player fixture. Set `YOUTUBE_TEST_BROWSER`
+if the browser executable is not found automatically.

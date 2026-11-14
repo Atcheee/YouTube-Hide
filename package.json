@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node --test",
-    "test:browser": "node scripts/verify-crunchyroll-speed.cjs"
+    "test:browser": "node scripts/verify-crunchyroll-speed.cjs",
+    "test:youtube-hover": "node scripts/verify-youtube-hover.cjs"
   },
   "devDependencies": {
     "jsdom": "^27.2.0",

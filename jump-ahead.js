@@ -7,6 +7,7 @@
   const JUMP_AHEAD_PATTERN = /\bjump\s+ahead\b/i;
   const CHECK_INTERVAL_MS = 1000;
   const PROBE_CLASS = "youtube-hide-timeline-probe";
+  const QUIET_CLASS = "youtube-hide-auto-activity";
   const skippedVideos = new Set();
   let scanQueued = false;
   let lastPlayerActivity = -Infinity;
@@ -15,6 +16,8 @@
   let noticeTimer = null;
   let timelineProbe = null;
   let previewPlayer = null;
+  let quietPlayer = null;
+  let automaticPlayer = null;
 
   function dispatchHover(target, type, options, bubbles = true) {
     if (type.startsWith("pointer")) {
@@ -33,7 +36,11 @@
     timelineProbe = null;
     window.clearTimeout(probe.timer);
     if (!sendLeave) return;
-    const options = { ...probe.options, relatedTarget: probe.video };
+    // A leave at the old timeline coordinates can still look like an active
+    // timeline hover to the player's shared pointer handlers.
+    const bounds = probe.video.getBoundingClientRect();
+    const options = { ...probe.options, relatedTarget: probe.video,
+      clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 };
     dispatchHover(probe.timeline, "pointerout", options);
     dispatchHover(probe.timeline, "mouseout", options);
     for (const target of probe.targets.slice().reverse()) {
@@ -45,6 +52,42 @@
   function restoreUserPreviews() {
     previewPlayer?.classList.remove(PROBE_CLASS);
     previewPlayer = null;
+  }
+
+  function restoreUserControls() {
+    quietPlayer?.classList.remove(QUIET_CLASS);
+    quietPlayer = null;
+    automaticPlayer = null;
+  }
+
+  function endPlayerActivity() {
+    const player = automaticPlayer;
+    automaticPlayer = null;
+    if (!player || player.matches(":hover")) return;
+    const video = player.querySelector("video");
+    if (!video) return;
+    const bounds = player.getBoundingClientRect();
+    const options = { view: window, buttons: 0, relatedTarget: null,
+      clientX: bounds.left - 1, clientY: bounds.top - 1 };
+    dispatchHover(video, "pointerout", options);
+    dispatchHover(video, "mouseout", options);
+    // Ending only timeline hover leaves the rest of the player awake. Notify
+    // the video surface and its ancestors, including fullscreen quick actions.
+    for (let target = video; target; target = target.parentElement) {
+      dispatchHover(target, "pointerleave", options, false);
+      dispatchHover(target, "mouseleave", options, false);
+      if (target === player) break;
+    }
+  }
+
+  function quietAutomaticActivity(player) {
+    if (quietPlayer && quietPlayer !== player) restoreUserControls();
+    if (previewPlayer && previewPlayer !== player) restoreUserPreviews();
+    quietPlayer = player;
+    automaticPlayer = player;
+    previewPlayer = player;
+    // Apply before mouse events so unattended probes cannot flash native chrome.
+    player.classList.add(QUIET_CLASS, PROBE_CLASS);
   }
 
   function probeTimeline(player, video) {
@@ -65,15 +108,13 @@
       clientY: bounds.top + bounds.height / 2
     };
     const targets = container && container !== timeline ? [container, timeline] : [timeline];
-    restoreUserPreviews();
-    previewPlayer = player;
-    // Keep suppression until genuine user input, including delayed tooltip updates.
-    player.classList.add(PROBE_CLASS);
+    // Keep seek-preview suppression until an intentional timeline hover, including
+    // when the user returns to another part of the video from a different monitor.
     const probe = { timeline, targets, video, options, timer: null };
     timelineProbe = probe;
     probe.timer = window.setTimeout(() => {
       if (timelineProbe !== probe) return;
-      try { tryJumpAhead(); } finally { endTimelineProbe(); }
+      try { tryJumpAhead(); } finally { endTimelineProbe(); endPlayerActivity(); }
     }, 250);
     dispatchHover(timeline, "pointerover", options);
     dispatchHover(timeline, "mouseover", options);
@@ -147,11 +188,12 @@
     const video = player.querySelector("video");
     if (!video || video.paused || video.ended || video.seeking || video.readyState < 2) return;
     const timeline = player.querySelector(".ytp-progress-bar-container") || player.querySelector(".ytp-progress-bar");
-    if (timeline?.matches(":hover")) return;
+    if (player.matches(":hover") || timeline?.matches(":hover")) return;
 
     const now = Date.now();
     if (now - lastPlayerActivity < CHECK_INTERVAL_MS) return;
     lastPlayerActivity = now;
+    quietAutomaticActivity(player);
 
     // Ask YouTube to reveal hover-driven actions without focusing the tab or moving
     // the real cursor. Do not bypass disabled/hidden controls if it ignores the event.
@@ -180,12 +222,15 @@
       revealPlayerActions(player);
       button = availableJumpButton(player);
     }
-    if (!button || navigating || currentVideoId() !== videoId || skippedVideos.has(videoId)) return;
+    if (!button || navigating || currentVideoId() !== videoId || skippedVideos.has(videoId)) {
+      if (!timelineProbe) endPlayerActivity();
+      return;
+    }
 
     // Record before clicking: click handlers can synchronously change the DOM.
     // Keep video IDs across seeks, button replacements and SPA back navigation.
     skippedVideos.add(videoId);
-    try { button.click(); } finally { endTimelineProbe(); }
+    try { button.click(); } finally { endTimelineProbe(); endPlayerActivity(); }
     if (!navigating && currentVideoId() === videoId) showJumpNotice(player);
   }
 
@@ -210,7 +255,9 @@
     document.addEventListener("yt-navigate-start", () => {
       navigating = true;
       endTimelineProbe();
+      endPlayerActivity();
       restoreUserPreviews();
+      restoreUserControls();
       clearJumpNotice();
     });
     document.addEventListener("yt-navigate-finish", () => {
@@ -218,17 +265,30 @@
       scheduleScan();
     });
     window.addEventListener("popstate", scheduleScan);
-    document.addEventListener("visibilitychange", scheduleScan);
-    window.addEventListener("focus", scheduleScan);
+    function endInactiveHover() {
+      endTimelineProbe();
+      endPlayerActivity();
+      lastPlayerActivity = Date.now();
+    }
+    // Switching focus to another window/taskbar need not hide the current tab.
+    window.addEventListener("blur", endInactiveHover);
+    window.addEventListener("pagehide", endInactiveHover);
+    document.addEventListener("visibilitychange", () => { endInactiveHover(); scheduleScan(); });
+    window.addEventListener("focus", () => { endInactiveHover(); scheduleScan(); });
     window.setInterval(scheduleScan, CHECK_INTERVAL_MS);
     for (const event of ["pointermove", "mousemove", "pointerover", "mouseover", "pointerdown", "mousedown", "keydown"]) {
       document.addEventListener(event, (input) => {
         if (!input.isTrusted) return;
         if (input.type !== "keydown" &&
             !(input.target instanceof Element && input.target.closest("#movie_player"))) return;
-        // A real pointer now owns hover state. Do not send fake leave events over it.
-        endTimelineProbe(input.type === "keydown");
-        restoreUserPreviews();
+        const overTimeline = input.type !== "keydown" && input.target instanceof Element &&
+          input.target.closest(".ytp-progress-bar-container, .ytp-progress-bar");
+        // A return to the video surface must close the artificial timeline hover.
+        // Only an intentional timeline hover should expose native seek previews.
+        endTimelineProbe(!overTimeline);
+        if (!overTimeline) endPlayerActivity();
+        restoreUserControls();
+        if (overTimeline) restoreUserPreviews();
         lastPlayerActivity = Date.now();
       }, true);
     }

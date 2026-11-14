@@ -68,7 +68,7 @@
   function showError(message = "") {
     if (!error) return;
     if (error.textContent !== message) error.textContent = message;
-    error.hidden = !message;
+    if (error.hidden !== !message) error.hidden = !message;
   }
 
   function applyRate(video) {
@@ -76,10 +76,12 @@
     const state = videoStates.get(video);
     if (Math.abs(video.playbackRate - selectedRate) < 0.001 &&
         Math.abs(video.defaultPlaybackRate - selectedRate) < 0.001) return;
+    if (state.blocked) return;
     const now = Date.now();
     if (now - state.lastAttempt > 2000) state.attempts = 0;
     if (state.attempts >= 5) {
-      showError("The player is overriding playback speed. Choose a speed to try again.");
+      state.blocked = true;
+      showError(`Another speed controller keeps restoring ${formatRate(video.playbackRate)}. Disable Crunchyroll Speeder or other speed extensions, then refresh this tab.`);
       return;
     }
     state.attempts += 1;
@@ -103,12 +105,12 @@
     }
     if (!panel) return;
     slider.value = String(normalizeRate(rate));
-    slider.setAttribute("aria-valuetext", `${Number(rate.toFixed(2))} times normal speed`);
+    setAttribute(slider, "aria-valuetext", `${Number(rate.toFixed(2))} times normal speed`);
     if (output.textContent !== formatRate(rate)) output.textContent = formatRate(rate);
     minus.disabled = rate <= MIN_RATE;
     plus.disabled = rate >= MAX_RATE;
     for (const preset of panel.querySelectorAll("[data-speed]")) {
-      preset.setAttribute("aria-pressed", String(Math.abs(Number(preset.dataset.speed) - rate) < 0.001));
+      setAttribute(preset, "aria-pressed", String(Math.abs(Number(preset.dataset.speed) - rate) < 0.001));
     }
   }
 
@@ -119,6 +121,7 @@
     showError();
     for (const video of videos) {
       videoStates.get(video).attempts = 0;
+      videoStates.get(video).blocked = false;
       applyRate(video);
     }
     if (!videos.length) showError("Waiting for the video player…");
@@ -159,8 +162,12 @@
     panel.setAttribute("aria-label", "Playback speed");
     panel.innerHTML = `
       <div class="youtube-hide-speed-header">
-        <button type="button" class="youtube-hide-speed-back" aria-label="Close playback speed">‹</button>
-        <span>Playback speed</span>
+        <button type="button" class="youtube-hide-speed-back" aria-label="Close playback speed">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <path d="m14.5 5.5-6.5 6.5 6.5 6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <h2 class="youtube-hide-speed-title">Playback speed</h2>
       </div>
       <div class="youtube-hide-speed-body">
         <output class="youtube-hide-speed-value" aria-live="polite">1x</output>
@@ -218,11 +225,11 @@
     buttons = allElements(BUTTON_SELECTOR);
     for (const video of videos) {
       if (!videoStates.has(video)) {
-        const state = { attempts: 0, lastAttempt: 0 };
+        const state = { attempts: 0, lastAttempt: 0, blocked: false };
         videoStates.set(video, state);
         for (const event of ["loadedmetadata", "play", "playing", "ratechange"]) {
           video.addEventListener(event, () => {
-            if (event !== "ratechange") state.attempts = 0;
+            if (event !== "ratechange") { state.attempts = 0; state.blocked = false; }
             applyRate(video);
             render();
           });
@@ -276,7 +283,7 @@
       if (area !== "local" || !Object.hasOwn(changes, STORAGE_KEY)) return;
       selectedRate = normalizeRate(changes[STORAGE_KEY].newValue);
       hasPreference = true;
-      for (const video of videos) videoStates.get(video).attempts = 0;
+      for (const video of videos) { videoStates.get(video).attempts = 0; videoStates.get(video).blocked = false; }
       scheduleScan();
     });
     scheduleScan();

@@ -193,5 +193,28 @@ test("rate-reset loops are bounded instead of fighting the player indefinitely",
     page.event("ratechange", page.video);
   }
   assert.equal(page.video.playbackRate, 1);
-  assert.match(page.panel.querySelector("[role=status]").textContent, /overriding playback speed/);
+  assert.match(page.panel.querySelector("[role=status]").textContent, /Disable Crunchyroll Speeder/);
+});
+
+test("Speeder-style DOM observer conflict stops retrying and recovers once the competing controller is off", async (t) => {
+  const page = setup(t);
+  await page.flush();
+  const competitor = new page.window.MutationObserver(() => { page.video.playbackRate = 1.3; });
+  competitor.observe(page.document.body, { attributes: true, childList: true, subtree: true });
+  page.open();
+  page.panel.querySelector('[data-speed="2"]').click();
+  for (let event = 0; event < 8; event += 1) {
+    page.document.body.dataset.playerTick = String(event);
+    await page.flush();
+    page.event("ratechange", page.video);
+  }
+  await page.flush();
+  assert.equal(page.video.playbackRate, 1.3);
+  assert.match(page.panel.querySelector("[role=status]").textContent, /restoring 1\.3x/);
+  competitor.disconnect();
+  page.panel.querySelector('[data-speed="1.75"]').click();
+  await page.flush();
+  assert.equal(page.video.playbackRate, 1.75);
+  assert.equal(page.output, "1.75x");
+  assert.equal(page.panel.querySelector("[role=status]").hidden, true);
 });

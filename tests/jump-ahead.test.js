@@ -444,3 +444,70 @@ test("a real timeline hover is left alone by background polling", async (t) => {
   assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
   assert.ok(timeline.isConnected);
 });
+
+test("returning from another monitor onto the video closes fake timeline hover before restoring controls", async (t) => {
+  const page = setup(t, "");
+  const { timeline, video } = addTimeline(page);
+  video.getBoundingClientRect = () => ({ left: 10, top: 20, width: 800, height: 400 });
+  let leavePosition;
+  timeline.addEventListener("mouseleave", (event) => { leavePosition = [event.clientX, event.clientY]; });
+  await page.flush();
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+  page.userPointerMove(video);
+  assert.deepEqual(leavePosition, [410, 220]);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), true);
+  const latePreview = page.document.createElement("div");
+  latePreview.className = "ytp-tooltip";
+  page.player.appendChild(latePreview);
+  assert.equal(page.window.getComputedStyle(latePreview).display, "none");
+});
+
+test("visible-tab window blur ends fake hover and focus does not unmask delayed previews", async (t) => {
+  const page = setup(t, "");
+  Object.defineProperty(page.document, "hidden", { value: false });
+  const { timeline } = addTimeline(page);
+  let hovers = 0;
+  let leaves = 0;
+  timeline.addEventListener("mouseenter", () => { hovers += 1; });
+  timeline.addEventListener("mouseleave", () => { leaves += 1; });
+  await page.flush();
+  page.event("blur", page.window);
+  assert.equal(leaves, 1);
+  assert.equal(page.document.hidden, false);
+  page.event("focus", page.window);
+  await page.flush();
+  assert.equal(hovers, 1);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), true);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+});
+
+test("video-surface activity is visually suppressed before it wakes controls, even without a timeline", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let wasQuietBeforeActivity = false;
+  page.player.addEventListener("mousemove", () => {
+    wasQuietBeforeActivity = page.player.classList.contains("youtube-hide-auto-activity");
+  });
+  await page.flush();
+  assert.equal(wasQuietBeforeActivity, true);
+  page.userPointerMove(video);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+});
+
+test("polling leaves a real video-surface hover alone while still clicking ready skip prompts", async (t) => {
+  const page = setup(t, "");
+  addTimeline(page);
+  const nativeMatches = page.player.matches.bind(page.player);
+  t.mock.method(page.player, "matches", (selector) => selector === ":hover" || nativeMatches(selector));
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => { movements += 1; });
+  await page.flush();
+  page.poll();
+  await page.flush();
+  assert.equal(movements, 0);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  page.player.insertAdjacentHTML("beforeend", overlay);
+  await page.flush();
+  assert.equal(page.clicks, 1);
+});

@@ -56,19 +56,24 @@
 .youtube-hide-speed-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 12px;
+  height: 56px;
+  padding: 11px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  font-weight: 600;
 }
 
 .youtube-hide-speed-panel .youtube-hide-speed-back {
-  width: 28px;
-  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   background: transparent;
   border-radius: 50%;
-  font-size: 28px;
 }
+
+.youtube-hide-speed-back svg { display: block; pointer-events: none; }
+.youtube-hide-speed-title { margin: 0; font: 600 14px/20px Roboto, Arial, sans-serif; }
 
 .youtube-hide-speed-body { padding: 18px 16px 22px; }
 

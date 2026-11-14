@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><style>
+  body { margin: 0; background: #111; color: white; font-family: Arial; }
+  #movie_player { position: relative; margin: 40px; width: 960px; height: 540px; background: #303840; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ytp-chrome-bottom { position: absolute; bottom: 0; width: 100%; height: 64px; opacity: 0; }
+  .ytp-progress-bar-container { position: absolute; left: 12px; right: 12px; top: 0; height: 12px; }
+  .ytp-progress-bar { position: absolute; inset: 0; background: #999; }
+  .ytp-tooltip { display: none; position: absolute; left: 70px; bottom: 80px; width: 200px; height: 110px; background: #ddd; color: #111; }
+  #movie_player[data-native-hover="true"] .ytp-tooltip { display: block; }
+  .ytp-timely-actions-overlay { position: absolute; right: 30px; bottom: 110px; }
+  .ytp-fullscreen-quick-actions { position: absolute; right: 16px; bottom: 80px; opacity: 0; }
+</style></head><body>
+<div id="movie_player" data-native-hover="false">
+  <video muted playsinline></video>
+  <div class="ytp-tooltip">Pull up for precise seeking</div>
+  <div class="ytp-chrome-bottom"><div class="ytp-progress-bar-container"><div class="ytp-progress-bar"></div></div></div>
+  <div class="ytp-fullscreen-quick-actions" data-overlay-order="13">
+    <yt-player-quick-action-buttons class="ytPlayerQuickActionButtonsHost ytPlayerQuickActionButtonsHostCompactControls ytPlayerQuickActionButtonsHostDisableBackdropFilter">
+      <button aria-label="like this video"><span class="ytSpecTouchFeedbackShapeFill"></span>Like</button>
+      <button aria-label="Dislike this video"><span class="ytSpecTouchFeedbackShapeFill"></span>Dislike</button>
+      <button aria-label="Comments"><span class="ytSpecTouchFeedbackShapeFill"></span>Comments</button>
+      <button aria-label="Share"><span class="ytSpecTouchFeedbackShapeFill"></span>Share</button>
+      <button aria-label="More actions"><span class="ytSpecTouchFeedbackShapeFill"></span>More</button>
+    </yt-player-quick-action-buttons>
+  </div>
+</div>
+<script>
+  const player = document.getElementById('movie_player');
+  const video = player.querySelector('video');
+  const timeline = player.querySelector('.ytp-progress-bar');
+  const bar = player.querySelector('.ytp-chrome-bottom');
+  const quickActions = player.querySelector('.ytp-fullscreen-quick-actions');
+  window.hoverFixture = { hovers: 0, leaves: 0, playerLeaves: 0, actions: 0, jumps: 0, offerJump: false, seeks: 0 };
+  let hideControls;
+  player.addEventListener('mousemove', () => {
+    bar.style.opacity = '1';
+    quickActions.style.opacity = '1';
+    clearTimeout(hideControls);
+    hideControls = setTimeout(() => { bar.style.opacity = '0'; quickActions.style.opacity = '0'; }, 350);
+  });
+  player.addEventListener('mouseleave', () => {
+    hoverFixture.playerLeaves += 1;
+    bar.style.opacity = '0';
+    quickActions.style.opacity = '0';
+  });
+  quickActions.addEventListener('click', () => { hoverFixture.actions += 1; });
+  timeline.addEventListener('mouseenter', () => { player.dataset.nativeHover = 'true'; });
+  timeline.addEventListener('mousemove', () => {
+    hoverFixture.hovers += 1;
+    player.dataset.nativeHover = 'true';
+    if (hoverFixture.offerJump && !player.querySelector('.ytp-timely-actions-overlay')) {
+      const overlay = document.createElement('div');
+      overlay.className = 'ytp-timely-actions-overlay';
+      overlay.innerHTML = '<button>Jump ahead<div class="ytSpecTouchFeedbackShapeFill"></div></button>';
+      overlay.querySelector('button').addEventListener('click', () => {
+        hoverFixture.jumps += 1;
+        video.currentTime += 1;
+        overlay.remove();
+      });
+      player.appendChild(overlay);
+    }
+  });
+  timeline.addEventListener('mouseleave', () => {
+    hoverFixture.leaves += 1;
+    player.dataset.nativeHover = 'false';
+  });
+  video.addEventListener('seeking', () => { hoverFixture.seeks += 1; });
+</script>
+</body></html>

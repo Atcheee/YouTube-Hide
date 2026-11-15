@@ -28,13 +28,18 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
         watermarkBottom: player.getBoundingClientRect().bottom - watermark.bottom,
         titleOpacity: getComputedStyle(player.querySelector('.ytp-fullscreen-metadata')).opacity,
         barOpacity: getComputedStyle(player.querySelector('.ytp-chrome-bottom')).opacity,
-        cursor: getComputedStyle(document.elementFromPoint(500, 200) || player).cursor
+        cursor: getComputedStyle(document.elementFromPoint(500, 200) || player).cursor,
+        captions: ['bottom-caption', 'positioned-caption', 'top-caption'].map(id => {
+          const rect = document.getElementById(id).getBoundingClientRect();
+          return Math.round((player.getBoundingClientRect().bottom - rect.bottom) * 10) / 10;
+        })
       });
     }
     return { frames: frames.length, offsets: [...new Set(frames.map(frame => Math.round(frame.watermarkBottom * 10) / 10))],
       titleFlashed: frames.some(frame => frame.titleOpacity !== '0'),
       barFlashed: frames.some(frame => frame.barOpacity !== '0'), checks: hoverFixture.hovers - initialHovers,
       cursors: [...new Set(frames.map(frame => frame.cursor))],
+      captionOffsets: [0, 1, 2].map(index => [...new Set(frames.map(frame => frame.captions[index]))]),
       fullscreen: document.fullscreenElement === document.getElementById('movie_player'),
       fullscreenLayout: document.getElementById('movie_player').classList.contains('ytp-fullscreen'),
       fillsViewport: document.getElementById('movie_player').getBoundingClientRect().width === innerWidth &&
@@ -89,9 +94,19 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     const parkedCursor = await sampleUnattendedFrames(page, false);
     assert.ok(parkedCursor.checks >= 2);
     assert.deepEqual(parkedCursor.cursors, ['none'], 'A parked cursor must stay hidden across automatic hover checks');
+    assert.ok(parkedCursor.captionOffsets.every(offsets => offsets.length === 1),
+      `Captions must not move during automatic checks: ${JSON.stringify(parkedCursor.captionOffsets)}`);
+    assert.ok(Math.abs(parkedCursor.captionOffsets[0][0] - 540 * .02) < .2);
+    assert.ok(Math.abs(parkedCursor.captionOffsets[1][0] - 540 * .35) < .2, 'Custom caption bottom position must be preserved');
     await page.mouse.move(501, 200);
     assert.notEqual(await page.locator('video').evaluate(video => getComputedStyle(video).cursor), 'none',
       'Real mouse movement must immediately restore the cursor');
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('bottom-caption')).marginBottom === '64px');
+    const manualCaption = await page.locator('#bottom-caption').evaluate(caption => {
+      const player = document.getElementById('movie_player');
+      return player.getBoundingClientRect().bottom - caption.getBoundingClientRect().bottom;
+    });
+    assert.ok(Math.abs(manualCaption - (540 * .02 + 64)) < .2, 'Manual controls must still lift captions clear of the bar');
     console.log(JSON.stringify({ parkedCursor }));
     await page.evaluate(() => {
       window.dispatchEvent(new Event("blur"));
@@ -209,6 +224,22 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     assert.deepEqual(fullscreen.offsets, [24]);
     assert.equal(fullscreen.titleFlashed, false);
     assert.equal(fullscreen.barFlashed, false);
+    assert.ok(fullscreen.captionOffsets.every(offsets => offsets.length === 1), 'Fullscreen captions must stay stationary');
+    assert.ok(Math.abs(fullscreen.captionOffsets[0][0] - 800 * .02) < .2);
+    assert.ok(Math.abs(fullscreen.captionOffsets[1][0] - 800 * .35) < .2);
+    // Cue changes and late caption nodes must retain their authored positions.
+    await page.evaluate(() => {
+      const caption = document.getElementById('positioned-caption');
+      const replacement = caption.cloneNode(true);
+      replacement.textContent = 'New caption cue';
+      replacement.style.height = '72px';
+      caption.replaceWith(replacement);
+      document.getElementById('top-caption').style.top = '15%';
+    });
+    assert.ok(Math.abs(await page.locator('#positioned-caption').evaluate(caption =>
+      document.getElementById('movie_player').getBoundingClientRect().bottom - caption.getBoundingClientRect().bottom) - 800 * .35) < .2);
+    assert.ok(Math.abs(await page.locator('#top-caption').evaluate(caption =>
+      caption.getBoundingClientRect().top - document.getElementById('movie_player').getBoundingClientRect().top) - 800 * .15) < .2);
     await page.evaluate(() => { hoverFixture.offerJump = true; });
     await page.waitForFunction(() => hoverFixture.jumps === 1);
     assert.equal(await page.evaluate(() => hoverFixture.nativeHides + hoverFixture.nativeShows), 0);
@@ -217,7 +248,7 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     assert.equal(await page.locator('.ytp-fullscreen-metadata').evaluate(element => getComputedStyle(element).opacity), '1');
     assert.equal(await page.locator('.ytp-chrome-bottom').evaluate(element => getComputedStyle(element).opacity), '1');
     console.log(JSON.stringify({ fullscreen, fullscreenLayoutSimulated: true, applicationFocusSimulated: true }));
-    console.log("Passed: no title/control flicker or watermark movement across repeated checks, native APIs untouched, manual UI, automatic skip, rewind protection.");
+    console.log("Passed: stationary captions, cursor and watermark across automatic checks, custom caption positions/cue updates, manual UI, automatic skip, rewind protection.");
   } finally {
     await context.close();
   }

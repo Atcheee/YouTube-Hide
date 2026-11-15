@@ -23,6 +23,10 @@
   .ytp-fullscreen-quick-actions { height: 28px; opacity: 0; }
   .ytp-autohide .ytp-fullscreen-metadata, .ytp-autohide .ytp-fullscreen-quick-actions { height: 0; margin: 0; }
   .ytp-fullscreen-grid { position: absolute; left: 48%; bottom: 6px; opacity: 0; }
+  #ytp-caption-window-container { position: absolute; inset: 0; pointer-events: none; }
+  .caption-window { position: absolute; width: 200px; height: 36px; background: #000a; color: white; }
+  .caption-window.ytp-caption-window-bottom { margin-bottom: 64px; transition: margin-bottom .1s; }
+  .ytp-autohide .caption-window.ytp-caption-window-bottom { margin-bottom: 0; }
 </style></head><body>
 <div id="movie_player" class="ytp-autohide" data-native-hover="false">
   <video muted playsinline></video>
@@ -45,6 +49,11 @@
     </div>
   </div>
   <div class="ytp-fullscreen-grid"><button aria-label="Show related videos">⌃</button></div>
+  <div id="ytp-caption-window-container">
+    <div id="bottom-caption" class="caption-window ytp-caption-window-bottom" style="left:30%;bottom:2%">Bottom caption</div>
+    <div id="positioned-caption" class="caption-window ytp-caption-window-bottom" style="left:5%;bottom:35%">Custom-position caption</div>
+    <div id="top-caption" class="caption-window" style="left:60%;top:8%">Authored top caption</div>
+  </div>
 </div>
 <script>
   const player = document.getElementById('movie_player');

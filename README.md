@@ -56,7 +56,11 @@ rows, and keeps a parked cursor hidden across automatic hover checks. Real mouse
 movement restores the cursor immediately. It also holds the overlay stack at YouTube's
 native idle offset of 24px. This keeps the
 channel watermark from moving during checks. Real movement, button presses, keyboard,
-clicks, and wheel input remove suppression. Layout-generated over/enter events do not. Video-surface pointer
+clicks, and wheel input remove suppression. Automatic checks also remove the control-bar
+clearance margin from caption windows, so captions stay put while the hidden controls
+are probed. Authored caption positions, text and sizing remain intact; manual input
+restores native caption clearance. Layout-generated over/enter events do not unmask
+controls. Video-surface pointer
 interaction expires after three idle seconds; intentional control-bar hover and held
 mouse buttons remain protected, so stale CSS `:hover` from
 another monitor cannot keep controls awake. Artificial hover also closes on window blur,

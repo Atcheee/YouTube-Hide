@@ -78,6 +78,14 @@ ytd-grid-video-renderer.hide-streamed-days-video {
   cursor: none !important;
 }
 
+/* Hidden controls must not reserve clearance under captions during fake hover.
+   Leave each caption's authored top/bottom/left, size and text layout intact. */
+#movie_player.youtube-hide-auto-activity .caption-window.ytp-caption-window-bottom,
+#movie_player.youtube-hide-auto-activity #ytp-caption-window-container > .caption-window {
+  margin-bottom: 0 !important;
+  transition: none !important;
+}
+
 #movie_player.youtube-hide-auto-activity .ytp-chrome-bottom,
 #movie_player.youtube-hide-auto-activity .ytp-chrome-top,
 #movie_player.youtube-hide-auto-activity .ytp-gradient-bottom,

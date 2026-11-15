@@ -24,12 +24,12 @@ const assert = require("node:assert/strict");
         window.nativeArrows = 0;
         // The application installs this before document_idle content scripts.
         window.addEventListener('keydown', event => {
-          if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          if (!['ArrowLeft', 'ArrowRight', 'j', 'k', 'l'].includes(event.key)) return;
           nativeArrows++;
           document.querySelector('video').currentTime += event.key === 'ArrowLeft' ? -10 : 10;
           event.preventDefault();
         }, true);
-      </script>${fixture}` }));
+      </script><style>#player-container{position:relative;width:900px;height:550px}video{width:100%;height:100%}[data-testid=bottom-right-controls-stack]{position:absolute;right:12px;bottom:12px}.native-captions{position:absolute;bottom:2%;left:20%;height:24px}</style>${fixture}` }));
     await page.goto("https://www.crunchyroll.com/watch/KEYS");
     const wave = Buffer.alloc(44 + 16000 * 60 * 2);
     wave.write("RIFF", 0); wave.writeUInt32LE(wave.length - 8, 4); wave.write("WAVEfmt ", 8);
@@ -58,6 +58,39 @@ const assert = require("node:assert/strict");
     await page.keyboard.press("ArrowRight");
     assert.equal(await page.evaluate(() => nativeArrows), 1);
     assert.equal(await page.locator("video").evaluate(video => video.currentTime), 20);
-    console.log("Passed: first arrow press, focused Play/timeline controls, repeated keys, early native-capture conflict, and immediate native restoration when disabled.");
+    await page.evaluate(() => {
+      const caption = document.createElement('div');
+      caption.className = 'native-captions'; caption.textContent = 'Native caption';
+      document.getElementById('player-container').appendChild(caption);
+    });
+    await page.getByTestId('playback-speed-button').click();
+    const speed = page.getByRole('slider', { name: 'Playback speed', exact: true });
+    await speed.press('ArrowLeft');
+    assert.equal(await page.locator('video').evaluate(video => video.playbackRate), .95);
+    for (const key of ['ArrowUp', 'ArrowDown', 'j', 'k', 'l']) await speed.press(key);
+    assert.equal(await page.locator('video').evaluate(video => video.currentTime), 20);
+    assert.equal(await page.evaluate(() => nativeArrows), 1, 'The speed picker must block earlier native shortcuts');
+    const panel = page.locator('#youtube-hide-crunchyroll-speed');
+    const left = await panel.evaluate(panel => panel.style.left);
+    await page.locator('#player-container').evaluate(player => { player.style.width = '700px'; player.style.height = '400px'; });
+    await page.waitForFunction(previous => document.getElementById('youtube-hide-crunchyroll-speed').style.left !== previous, left);
+    const captionOffset = await page.locator('.native-captions').evaluate(caption =>
+      document.getElementById('player-container').getBoundingClientRect().bottom - caption.getBoundingClientRect().bottom);
+    assert.ok(Math.abs(captionOffset - 8) < .2, 'Player tools must not shift native captions');
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ url: 'https://www.crunchyroll.com/*' });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.getElementById('player-container') });
+        document.dispatchEvent(new Event('fullscreenchange'));
+      } });
+    });
+    assert.equal(await panel.evaluate(panel => panel.parentElement.id), 'player-container');
+    const bounds = await panel.boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height);
+    await speed.press('Escape');
+    assert.equal(await panel.isVisible(), false);
+    assert.equal(await page.getByTestId('playback-speed-button').evaluate(button => document.activeElement === button), true);
+    console.log('Passed: first/repeated seeks, early native-capture conflicts, speed-dialog shortcut isolation, player-only resizes, native caption geometry, simulated fullscreen menu hosting, and Escape focus restoration.');
   } finally { await context.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

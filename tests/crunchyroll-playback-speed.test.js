@@ -9,13 +9,20 @@ const script = readFileSync(join(__dirname, "..", "crunchyroll-playback-speed.js
 const fixture = readFileSync(join(__dirname, "fixtures", "crunchyroll-speed-player.html"), "utf8");
 const KEY = "crunchyrollPlaybackSpeed";
 
-function setup(t, { saved = null, delayedStorage = false, settings = {} } = {}) {
+function setup(t, { saved = null, delayedStorage = false, settings = {}, earlyNative = false } = {}) {
   const dom = new JSDOM(fixture, { url: "https://www.crunchyroll.com/watch/G4VUQ2GZ7/title", runScripts: "outside-only" });
   const { window } = dom;
   const { document } = window;
   const observers = [];
   const changes = [];
   const writes = [];
+  const resizers = [];
+  let nativeKeys = 0;
+  window.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; this.targets = new Set(); resizers.push(this); }
+    observe(target) { this.targets.add(target); }
+    disconnect() { this.targets.clear(); }
+  };
   let finishStorage;
   const NativeObserver = window.MutationObserver;
   window.MutationObserver = class extends NativeObserver {
@@ -38,10 +45,21 @@ function setup(t, { saved = null, delayedStorage = false, settings = {} } = {}) 
   } };
   window.setInterval = () => 1;
   const changeSettings = installSettings(window, settings);
+  if (earlyNative) {
+    window.eval(readFileSync(join(__dirname, "..", "crunchyroll-player-bridge.js"), "utf8"));
+    window.addEventListener("keydown", event => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "j", "k", "l"].includes(event.key)) {
+        nativeKeys++;
+        document.querySelector("video").currentTime += 10;
+      }
+    }, true);
+  }
   window.eval(script);
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return {
     window, document, writes, changeSettings,
+    get nativeKeys() { return nativeKeys; },
+    resizePlayer() { resizers.filter(resizer => resizer.targets.size).forEach(resizer => resizer.callback([])); },
     get video() { return document.querySelector("video"); },
     get button() { return document.querySelector('[data-testid="playback-speed-button"]'); },
     get panel() { return document.getElementById("youtube-hide-crunchyroll-speed"); },
@@ -72,6 +90,33 @@ test("native speed button opens the replacement picker and presets set actual me
   assert.equal(page.button.textContent, "1.5x");
   assert.equal(page.panel.querySelector('[data-speed="1.5"]').getAttribute("aria-pressed"), "true");
   assert.equal(page.writes.at(-1)[KEY], 1.5);
+});
+
+test("speed-picker keys cannot also trigger earlier native seek or pause shortcuts", async t => {
+  const page = setup(t, { saved: 1.5, earlyNative: true });
+  await page.flush(); page.open();
+  page.video.currentTime = 30;
+  page.key("ArrowLeft");
+  assert.equal(page.video.currentTime, 30);
+  assert.equal(page.video.playbackRate, 1.45);
+  for (const key of ["ArrowUp", "ArrowDown", "j", "k", "l"]) page.key(key);
+  assert.equal(page.nativeKeys, 0);
+  assert.equal(page.video.currentTime, 30);
+});
+
+test("an open picker follows player-only resizes without waiting for polling", async t => {
+  const page = setup(t);
+  await page.flush();
+  let right = 900; let top = 600;
+  page.button.getBoundingClientRect = () => ({ right, top });
+  page.open();
+  page.panel.getBoundingClientRect = () => ({ width: 390, height: 240 });
+  const oldLeft = page.panel.style.left;
+  right = 600; top = 350;
+  page.resizePlayer();
+  assert.notEqual(page.panel.style.left, oldLeft);
+  assert.equal(page.panel.style.left, "210px");
+  assert.equal(page.panel.style.top, "98px");
 });
 
 for (const key of ["extensionEnabled", "crunchyrollEnabled", "crunchyrollSpeedEnabled"]) {

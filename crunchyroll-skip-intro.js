@@ -25,6 +25,7 @@
   let notice = null;
   let noticeVideo = null;
   let noticeTimer = null;
+  const noticeResizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(positionNotice) : null;
   let lastPath = location.pathname;
   let enabled = false;
   let showSkipNotice = true;
@@ -139,6 +140,7 @@
   }
 
   function clearNotice() {
+    noticeResizeObserver?.disconnect();
     if (noticeTimer !== null) window.clearTimeout(noticeTimer);
     noticeTimer = null;
     notice?.remove();
@@ -147,13 +149,16 @@
   }
 
   function positionNotice() {
+    if (settingsContext.isActive?.() === false) return;
     if (!notice) return;
     if (!noticeVideo?.isConnected) { clearNotice(); return; }
     const host = document.fullscreenElement || document.body;
     if (notice.parentElement !== host) host.appendChild(notice);
     const bounds = noticeVideo.getBoundingClientRect();
-    notice.style.left = `${bounds.left + bounds.width / 2}px`;
-    notice.style.top = `${bounds.top + bounds.height / 2}px`;
+    const left = `${bounds.left + bounds.width / 2}px`;
+    const top = `${bounds.top + bounds.height / 2}px`;
+    if (notice.style.left !== left) notice.style.left = left;
+    if (notice.style.top !== top) notice.style.top = top;
   }
 
   function showNotice(video) {
@@ -166,6 +171,7 @@
     notice.setAttribute("aria-live", "polite");
     notice.textContent = "Jumped ahead";
     positionNotice();
+    noticeResizeObserver?.observe(video);
     noticeTimer = window.setTimeout(clearNotice, 2000);
   }
 

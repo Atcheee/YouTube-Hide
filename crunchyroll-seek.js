@@ -88,7 +88,7 @@
 
   function nativeCommand(video, action, seconds) {
     if (!video || video.readyState < 1) return false;
-    return !video.dispatchEvent(new CustomEvent("playback-plus-native-command-v3", {
+    return !video.dispatchEvent(new CustomEvent("playback-plus-native-command-v4", {
       bubbles: true, cancelable: true, detail: JSON.stringify({ action, seconds })
     }));
   }
@@ -118,7 +118,7 @@
       const sign = direction(button);
       if (sign && seek(findVideo(button), sign)) consume(event);
     }, true);
-    document.addEventListener("playback-plus-keyboard-request-v3", request => {
+    document.addEventListener("playback-plus-keyboard-request-v4", request => {
       if (!active()) return;
       let key;
       try { ({ key } = JSON.parse(request.detail)); } catch { return; }

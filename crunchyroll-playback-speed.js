@@ -29,6 +29,7 @@
   let activeButton = null;
   let lastPath = location.pathname;
   let enabled = false;
+  const panelResizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(positionPanel) : null;
 
   function normalizeRate(value) {
     const rate = Number(value);
@@ -144,6 +145,7 @@
   }
 
   function closePanel(returnFocus = false) {
+    panelResizeObserver?.disconnect();
     if (!panel || panel.hidden) return;
     const opener = activeButton;
     panel.hidden = true;
@@ -153,6 +155,7 @@
   }
 
   function positionPanel() {
+    if (settingsContext.isActive?.() === false) return;
     if (!activeButton || !panel || panel.hidden) return;
     if (!activeButton.isConnected) { closePanel(); return; }
     const host = document.fullscreenElement || document.body;
@@ -163,8 +166,19 @@
     const height = bounds.height || 240;
     const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12));
     const top = Math.max(12, Math.min(anchor.top - height - 12, window.innerHeight - height - 12));
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
+    if (panel.style.left !== `${left}px`) panel.style.left = `${left}px`;
+    if (panel.style.top !== `${top}px`) panel.style.top = `${top}px`;
+  }
+
+  function handlePanelKey(key, target) {
+    if (key === "Escape") { closePanel(true); return true; }
+    if (target !== slider) return false;
+    const rates = { ArrowLeft: displayedRate() - STEP, ArrowDown: displayedRate() - STEP,
+      ArrowRight: displayedRate() + STEP, ArrowUp: displayedRate() + STEP,
+      Home: MIN_RATE, End: MAX_RATE };
+    if (!Object.hasOwn(rates, key)) return false;
+    chooseRate(rates[key]);
+    return true;
   }
 
   function buildPanel() {
@@ -231,6 +245,11 @@
     panel.hidden = false;
     render();
     positionPanel();
+    panelResizeObserver?.disconnect();
+    panelResizeObserver?.observe(panel);
+    panelResizeObserver?.observe(button);
+    const player = button.closest("#player-container, #player, #vilos, .video-player-wrapper");
+    if (player) panelResizeObserver?.observe(player);
     slider.focus({ preventScroll: true });
   }
 
@@ -301,13 +320,17 @@
       if (!panel || panel.hidden || !event.composedPath().includes(panel)) return;
       // Keep player shortcuts from seeking/pausing while the picker has focus.
       event.stopImmediatePropagation();
-      if (event.key === "Escape") { event.preventDefault(); closePanel(true); }
-      if (event.target === slider) {
-        const rates = { ArrowLeft: displayedRate() - STEP, ArrowDown: displayedRate() - STEP,
-          ArrowRight: displayedRate() + STEP, ArrowUp: displayedRate() + STEP,
-          Home: MIN_RATE, End: MAX_RATE };
-        if (Object.hasOwn(rates, event.key)) { event.preventDefault(); chooseRate(rates[event.key]); }
-      }
+      if (handlePanelKey(event.key, event.target)) event.preventDefault();
+    }, true);
+    document.addEventListener("playback-plus-keyboard-request-v4", request => {
+      if (settingsContext.isActive?.() === false || !enabled || !panel || panel.hidden || !request.composedPath().includes(panel)) return;
+      let key;
+      try { ({ key } = JSON.parse(request.detail)); } catch { return; }
+      if (typeof key !== "string") return;
+      // Acknowledge in the early MAIN-world listener, before native window
+      // shortcuts. J/K/L are swallowed here while the speed dialog has focus.
+      request.preventDefault();
+      handlePanelKey(key, request.composedPath().find(node => node instanceof Element));
     }, true);
     document.addEventListener("fullscreenchange", positionPanel);
     window.addEventListener("resize", positionPanel);

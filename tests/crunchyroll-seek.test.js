@@ -280,7 +280,7 @@ test("the MAIN bridge only accepts bounded commands on a video and installs once
   page.window.navigator.mediaSession.setActionHandler("seekbackward", () => calls++);
   page.key("ArrowLeft");
   assert.equal(calls, 1);
-  const command = detail => new page.window.CustomEvent("playback-plus-native-command-v3", {
+  const command = detail => new page.window.CustomEvent("playback-plus-native-command-v4", {
     bubbles: true, cancelable: true, detail: JSON.stringify(detail)
   });
   assert.equal(page.video.dispatchEvent(command({ action: "seekbackward", seconds: 500 })), true);

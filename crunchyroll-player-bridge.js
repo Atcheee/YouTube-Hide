@@ -3,8 +3,8 @@
 
   // MAIN world: Crunchyroll's media-session handlers and React timeline callback
   // belong to the page. Expose only fixed playback commands, never extension APIs.
-  if (window.__playbackPlusPlayerBridgeV3) return;
-  window.__playbackPlusPlayerBridgeV3 = true;
+  if (window.__playbackPlusPlayerBridgeV4) return;
+  window.__playbackPlusPlayerBridgeV4 = true;
   const handlers = new Map();
   let positionState = null;
   let pendingPositions = new WeakMap();
@@ -14,13 +14,13 @@
   // Its synchronous acknowledgement also stops interception after invalidation.
   window.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
-        !["ArrowLeft", "ArrowRight", "j", "J", "k", "K", "l", "L"].includes(event.key)) {
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Escape", "j", "J", "k", "K", "l", "L"].includes(event.key)) {
       pendingPositions = new WeakMap();
       return;
     }
     const target = event.composedPath().find(node => node instanceof Element);
     if (!target) return;
-    const request = new CustomEvent("playback-plus-keyboard-request-v3", {
+    const request = new CustomEvent("playback-plus-keyboard-request-v4", {
       bubbles: true, composed: true, cancelable: true,
       detail: JSON.stringify({ key: event.key, code: event.code })
     });
@@ -104,7 +104,7 @@
     return null;
   }
 
-  document.addEventListener("playback-plus-native-command-v3", event => {
+  document.addEventListener("playback-plus-native-command-v4", event => {
     const video = event.target;
     if (!(video instanceof HTMLVideoElement) || !video.isConnected) return;
     let command;

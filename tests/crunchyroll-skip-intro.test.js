@@ -17,6 +17,12 @@ function setup(t, { url = "https://www.crunchyroll.com/watch/EPISODE1/title", ma
   const { document } = window;
   const listeners = [];
   const observers = [];
+  const resizers = [];
+  window.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; this.targets = new Set(); resizers.push(this); }
+    observe(target) { this.targets.add(target); }
+    disconnect() { this.targets.clear(); }
+  };
   const pollers = [];
   const timers = new Map();
   const messages = [];
@@ -57,6 +63,7 @@ function setup(t, { url = "https://www.crunchyroll.com/watch/EPISODE1/title", ma
   document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return {
     window, document, video, listeners, timers, messages, changeSettings,
+    resizePlayer() { resizers.filter(resizer => resizer.targets.size).forEach(resizer => resizer.callback([])); },
     get button() { return document.querySelector("button"); },
     get player() { return document.getElementById("player"); },
     get notice() { return document.querySelector(".youtube-hide-crunchyroll-notice"); },
@@ -177,6 +184,18 @@ test("notice centers on the video, moves into fullscreen, and expires after two 
   const timer = [...page.timers.values()][0];
   assert.equal(timer.delay, 2000);
   timer.callback();
+  assert.equal(page.notice, null);
+});
+
+test("the skip notice follows player-only resizes and detaches its observer when cleared", async t => {
+  const page = setup(t);
+  await page.flush();
+  page.video.getBoundingClientRect = () => ({ left: 20, top: 30, width: 600, height: 300 });
+  page.resizePlayer();
+  assert.equal(page.notice.style.left, "320px");
+  assert.equal(page.notice.style.top, "180px");
+  page.changeSettings({ showSkipNotice: false });
+  page.resizePlayer();
   assert.equal(page.notice, null);
 });
 

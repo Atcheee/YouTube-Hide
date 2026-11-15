@@ -99,6 +99,9 @@ discarded tabs cannot run the content script, and background timers may be delay
   Speeds range from 0.25x to 4x. Controls change the actual media playback rate;
   selection is saved locally and restored for subsequent episodes and player reloads.
   The picker supports keyboard controls, fullscreen, and dynamic player replacement.
+  Its keyboard controls are isolated from native player shortcuts, including J/K/L,
+  so changing speed cannot also seek or pause playback. The picker follows player-only
+  resizes immediately and keeps focus restoration on Escape.
   Disable separate speed controllers such as **Crunchyroll Speeder** when using it:
   those extensions can continuously restore their own saved rate. The picker detects
   repeated resets, stops fighting the other controller, and displays an actionable message.
@@ -113,6 +116,7 @@ discarded tabs cannot run the content script, and background timers may be delay
   refreshing the watch page resets memory. Manual intro skips are remembered too.
 - Shows a centered **Jumped ahead** notice over the video for two seconds after
   automatic skips, including in player fullscreen. Does not skip recaps or credits.
+  The notice follows video-element resizes even when the browser window stays the same size.
 - The extension popup shows the detected intro-button count and skip status for each
   Crunchyroll frame. Open it during the intro if auto-skip does not run.
 

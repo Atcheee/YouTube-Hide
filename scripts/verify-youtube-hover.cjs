@@ -17,7 +17,7 @@ function silentWave() {
 async function sampleUnattendedFrames(page, simulateBlur = true) {
   return page.evaluate(async (simulateBlur) => {
     const frames = [];
-    const initialHovers = hoverFixture.hovers;
+    const initialChecks = hoverFixture.checks;
     const end = performance.now() + 3300;
     if (simulateBlur) window.dispatchEvent(new Event('blur'));
     while (performance.now() < end) {
@@ -37,7 +37,7 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     }
     return { frames: frames.length, offsets: [...new Set(frames.map(frame => Math.round(frame.watermarkBottom * 10) / 10))],
       titleFlashed: frames.some(frame => frame.titleOpacity !== '0'),
-      barFlashed: frames.some(frame => frame.barOpacity !== '0'), checks: hoverFixture.hovers - initialHovers,
+      barFlashed: frames.some(frame => frame.barOpacity !== '0'), checks: hoverFixture.checks - initialChecks,
       cursors: [...new Set(frames.map(frame => frame.cursor))],
       captionOffsets: [0, 1, 2].map(index => [...new Set(frames.map(frame => frame.captions[index]))]),
       fullscreen: document.fullscreenElement === document.getElementById('movie_player'),
@@ -108,6 +108,39 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     });
     assert.ok(Math.abs(manualCaption - (540 * .02 + 64)) < .2, 'Manual controls must still lift captions clear of the bar');
     console.log(JSON.stringify({ parkedCursor }));
+    // A menu opened by the player must stay usable even after input becomes idle.
+    await page.evaluate(() => {
+      const menu = document.createElement('div');
+      menu.id = 'fixture-menu';
+      menu.className = 'ytp-popup ytp-settings-menu';
+      menu.setAttribute('role', 'menu');
+      menu.style.cssText = 'position:absolute;right:10px;top:50px;width:180px;height:120px;background:#222';
+      document.getElementById('movie_player').appendChild(menu);
+    });
+    await page.waitForFunction(() => !document.getElementById('movie_player').classList.contains('youtube-hide-auto-activity'));
+    const menuChecks = await page.evaluate(() => hoverFixture.checks);
+    await page.waitForTimeout(3400);
+    assert.equal(await page.evaluate(() => hoverFixture.checks), menuChecks, 'Idle menus must not receive synthetic hover checks');
+    await page.locator('#fixture-menu').evaluate(menu => menu.remove());
+    await page.mouse.move(1150, 740);
+    await page.waitForFunction(() => document.getElementById('movie_player').classList.contains('youtube-hide-auto-activity'));
+    // Theater-style resizes must cancel the old hover and recompute coordinates.
+    await page.locator('#movie_player').evaluate(player => { player.style.width = '800px'; player.style.height = '450px'; });
+    await page.waitForFunction(() => document.getElementById('movie_player').dataset.nativeHover === 'false');
+    await page.waitForFunction(() => document.getElementById('movie_player').classList.contains('youtube-hide-auto-activity'));
+    assert.equal(await page.locator('#bottom-caption').evaluate(caption => getComputedStyle(caption).marginBottom), '0px');
+    await page.locator('#movie_player').evaluate(player => {
+      player.classList.add('ytp-player-minimized');
+      player.style.width = '400px'; player.style.height = '225px';
+    });
+    await page.waitForFunction(() => document.getElementById('movie_player').classList.contains('youtube-hide-auto-activity'));
+    assert.ok(Math.abs(await page.locator('.iv-branding').evaluate(watermark =>
+      document.getElementById('movie_player').getBoundingClientRect().bottom - watermark.getBoundingClientRect().bottom) - 36) < .2,
+      'Mini-player checks must use the mini-player overlay offset');
+    await page.locator('#movie_player').evaluate(player => {
+      player.classList.remove('ytp-player-minimized');
+      player.style.width = '960px'; player.style.height = '540px';
+    });
     await page.evaluate(() => {
       window.dispatchEvent(new Event("blur"));
       window.dispatchEvent(new Event("focus"));

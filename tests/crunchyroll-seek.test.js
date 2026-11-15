@@ -31,7 +31,7 @@ async function setup(t, settings = {}, { earlyNative = false } = {}) {
   video.getClientRects = () => [{}];
   video.currentTime = 50;
   // The page owns the seek operation. The extension only sends native commands.
-  Object.defineProperty(window.navigator, "mediaSession", { value: { setActionHandler() {} } });
+  Object.defineProperty(window.navigator, "mediaSession", { value: { setActionHandler() {}, setPositionState() {} } });
   window.eval(readFileSync(join(__dirname, "..", "crunchyroll-player-bridge.js"), "utf8"));
   const mediaTime = Object.getOwnPropertyDescriptor(window.HTMLMediaElement.prototype, "currentTime");
   for (const [action, sign] of [["seekbackward", -1], ["seekforward", 1]]) {
@@ -280,7 +280,7 @@ test("the MAIN bridge only accepts bounded commands on a video and installs once
   page.window.navigator.mediaSession.setActionHandler("seekbackward", () => calls++);
   page.key("ArrowLeft");
   assert.equal(calls, 1);
-  const command = detail => new page.window.CustomEvent("playback-plus-native-command-v2", {
+  const command = detail => new page.window.CustomEvent("playback-plus-native-command-v3", {
     bubbles: true, cancelable: true, detail: JSON.stringify(detail)
   });
   assert.equal(page.video.dispatchEvent(command({ action: "seekbackward", seconds: 500 })), true);
@@ -306,4 +306,21 @@ test("five-second arrows work immediately with focus on native Play and timeline
   timeline.classList.add("timeline-slider");
   assert.equal(page.key("ArrowRight", timeline).defaultPrevented, true);
   assert.equal(page.video.currentTime, 50);
+});
+
+test("held arrows accumulate while the native UI clock buffers and reset on episode changes", async t => {
+  const page = await setup(t, { crunchyrollFiveSecondSeekEnabled: true });
+  const positions = [];
+  page.window.navigator.mediaSession.setActionHandler("seekto", ({ seekTime }) => positions.push(seekTime));
+  page.window.navigator.mediaSession.setPositionState({ position: 50, duration: 100 });
+  page.key("ArrowLeft"); page.key("ArrowLeft"); page.key("ArrowRight");
+  assert.deepEqual(positions, [45, 40, 45]);
+  page.window.history.pushState({}, "", "/watch/NEXT");
+  page.window.navigator.mediaSession.setPositionState({ position: 20, duration: 100 });
+  page.key("ArrowLeft");
+  assert.equal(positions.at(-1), 15);
+  page.video.dispatchEvent(new page.window.Event("loadedmetadata"));
+  page.window.navigator.mediaSession.setPositionState({ position: 70, duration: 100 });
+  page.key("ArrowRight");
+  assert.equal(positions.at(-1), 75);
 });

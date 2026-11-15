@@ -27,12 +27,22 @@
   let pointerOverControls = false;
   let lastPointerActivity = -Infinity;
   let lastKeyboardActivity = -Infinity;
+  let nextReveal = "timeline";
   let enabled = false;
   let showNotice = true;
+  let observedPlayer = null;
+  let observedSize = null;
+
+  function hasInteractiveUi(player) {
+    const focused = document.activeElement;
+    if (document.hasFocus() && focused instanceof Element && player.contains(focused) && focused.matches(":focus-visible") &&
+        focused.closest('.ytp-chrome-bottom, .ytp-chrome-top, .ytp-popup, [role="menu"], [role="dialog"], .caption-window')) return true;
+    return [...player.querySelectorAll('.ytp-popup, .ytp-settings-menu, [role="menu"], [role="dialog"]')].some(isAvailable);
+  }
 
   function userIsInteracting(player) {
     const now = Date.now();
-    return now - lastKeyboardActivity < USER_IDLE_MS ||
+    return hasInteractiveUi(player) || now - lastKeyboardActivity < USER_IDLE_MS ||
       (pointerPlayer === player && (pointerPressed || pointerOverControls || now - lastPointerActivity < USER_IDLE_MS));
   }
 
@@ -75,6 +85,34 @@
     quietPlayer?.classList.remove(QUIET_CLASS);
     quietPlayer = null;
     automaticPlayer = null;
+  }
+
+  function handleGeometryChange() {
+    endTimelineProbe();
+    endPlayerActivity();
+    // Keep existing idle masks through a layout-only change: late native hover
+    // callbacks must not reveal a thumbnail or controls between resized checks.
+    // Real input still releases them through the normal input handlers.
+    lastPlayerActivity = Date.now();
+    scheduleScan();
+  }
+
+  const sizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+    if (!observedPlayer?.isConnected) return;
+    const rect = observedPlayer.getBoundingClientRect();
+    const size = `${rect.width}:${rect.height}`;
+    if (observedSize === size) return;
+    observedSize = size;
+    handleGeometryChange();
+  }) : null;
+
+  function watchPlayerSize(player) {
+    if (observedPlayer === player) return;
+    sizeObserver?.disconnect();
+    observedPlayer = player;
+    const rect = player.getBoundingClientRect();
+    observedSize = `${rect.width}:${rect.height}`;
+    sizeObserver?.observe(player);
   }
 
   function endPlayerActivity() {
@@ -141,6 +179,7 @@
     dispatchHover(timeline, "pointermove", options);
     dispatchHover(timeline, "mousemove", options);
     // Only hover events: no down/up/click events or direct changes to currentTime.
+    return true;
   }
 
   function clearJumpNotice() {
@@ -211,6 +250,14 @@
     lastPlayerActivity = now;
     quietAutomaticActivity(player);
 
+    // Use one reveal strategy per check. Timeline events already bubble through
+    // the player; waking the video surface as well only duplicates that activity.
+    if (nextReveal === "timeline" && probeTimeline(player, video)) {
+      nextReveal = "surface";
+      return;
+    }
+    nextReveal = "timeline";
+
     // Ask YouTube to reveal hover-driven actions without focusing the tab or moving
     // the real cursor. Do not bypass disabled/hidden controls if it ignores the event.
     const bounds = player.getBoundingClientRect();
@@ -220,9 +267,6 @@
       clientX: bounds.left + bounds.width / 2,
       clientY: bounds.top + bounds.height / 2
     }));
-    if (!navigating && !skippedVideos.has(currentVideoId()) && !availableJumpButton(player)) {
-      probeTimeline(player, video);
-    }
   }
 
   function tryJumpAhead() {
@@ -233,6 +277,13 @@
 
     const player = document.getElementById("movie_player");
     if (!player) return;
+    watchPlayerSize(player);
+    if (hasInteractiveUi(player)) {
+      endTimelineProbe();
+      restoreUserPreviews();
+      restoreUserControls();
+      return;
+    }
 
     let button = availableJumpButton(player);
     if (!button) {
@@ -284,6 +335,7 @@
 
     document.addEventListener("yt-navigate-start", () => {
       navigating = true;
+      nextReveal = "timeline";
       pointerPlayer = null;
       pointerPressed = false;
       pointerOverControls = false;
@@ -293,12 +345,16 @@
       restoreUserPreviews();
       restoreUserControls();
       clearJumpNotice();
+      sizeObserver?.disconnect();
+      observedPlayer = null;
     });
     document.addEventListener("yt-navigate-finish", () => {
       navigating = false;
       scheduleScan();
     });
     window.addEventListener("popstate", scheduleScan);
+    window.addEventListener("resize", handleGeometryChange);
+    document.addEventListener("fullscreenchange", handleGeometryChange);
     function endInactiveHover() {
       pointerPlayer = null;
       pointerPressed = false;

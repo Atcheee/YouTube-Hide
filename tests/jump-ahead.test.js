@@ -731,3 +731,76 @@ test("manual input does not override native control state the extension did not 
   page.userPointerMove(page.player.querySelector("video"));
   assert.equal(shows, 0);
 });
+
+test("open menus remain protected past idle and probes resume only after closing", async t => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let movements = 0;
+  page.player.addEventListener("mousemove", () => movements++);
+  await page.flush();
+  const menu = page.document.createElement("div");
+  menu.className = "ytp-popup ytp-settings-menu";
+  menu.setAttribute("role", "menu");
+  page.player.appendChild(menu);
+  await page.flush();
+  const before = movements;
+  now += 10000; page.poll(); await page.flush();
+  assert.equal(movements, before);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+  menu.hidden = true;
+  now += 1000; page.poll(); await page.flush();
+  assert.ok(movements > before);
+  assert.ok(timeline.isConnected);
+});
+
+test("keyboard focus in native controls is not masked after the keyboard idle timeout", async t => {
+  const page = setup(t, '<div class="ytp-chrome-bottom"><button>Settings</button></div>');
+  setPlaying(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let focused = true;
+  t.mock.method(page.document, "hasFocus", () => focused);
+  page.button.focus();
+  await page.flush();
+  now += 10000; page.poll(); await page.flush();
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), false);
+  focused = false;
+  now += 1000; page.poll(); await page.flush();
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+});
+
+test("resizing cancels stale coordinates while retaining idle masks against delayed native UI", async t => {
+  const page = setup(t, "");
+  const { timeline } = addTimeline(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  const points = [];
+  timeline.addEventListener("mousemove", event => points.push([event.clientX, event.clientY]));
+  await page.flush();
+  assert.deepEqual(points[0], [260, 403]);
+  timeline.getBoundingClientRect = () => ({ left: 50, top: 300, width: 400, height: 6 });
+  page.event("resize", page.window);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
+  assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), true);
+  for (let i = 0; i < 2; i++) { now += 1001; page.poll(); await page.flush(); }
+  assert.deepEqual(points.at(-1), [130, 303]);
+});
+
+test("a check uses either timeline or video-surface movement, not both", async t => {
+  const page = setup(t, "");
+  const { video, timeline } = addTimeline(page);
+  let now = 1000;
+  t.mock.method(page.window.Date, "now", () => now);
+  let surfaces = 0; let timelines = 0;
+  video.addEventListener("mousemove", () => surfaces++);
+  timeline.addEventListener("mousemove", () => timelines++);
+  await page.flush();
+  assert.equal(timelines + surfaces, 1);
+  now += 1001; page.poll(); await page.flush();
+  assert.equal(timelines + surfaces, 2);
+  assert.equal(timelines, 1);
+  assert.equal(surfaces, 1);
+});

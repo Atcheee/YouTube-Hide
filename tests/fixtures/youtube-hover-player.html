@@ -26,7 +26,9 @@
   #ytp-caption-window-container { position: absolute; inset: 0; pointer-events: none; }
   .caption-window { position: absolute; width: 200px; height: 36px; background: #000a; color: white; }
   .caption-window.ytp-caption-window-bottom { margin-bottom: 64px; transition: margin-bottom .1s; }
+  .caption-window.modern-caption { margin-bottom: 64px; transition: margin-bottom .1s; }
   .ytp-autohide .caption-window.ytp-caption-window-bottom { margin-bottom: 0; }
+  .ytp-autohide .caption-window.modern-caption { margin-bottom: 0; }
 </style></head><body>
 <div id="movie_player" class="ytp-autohide" data-native-hover="false">
   <video muted playsinline></video>
@@ -50,8 +52,8 @@
   </div>
   <div class="ytp-fullscreen-grid"><button aria-label="Show related videos">⌃</button></div>
   <div id="ytp-caption-window-container">
-    <div id="bottom-caption" class="caption-window ytp-caption-window-bottom" style="left:30%;bottom:2%">Bottom caption</div>
-    <div id="positioned-caption" class="caption-window ytp-caption-window-bottom" style="left:5%;bottom:35%">Custom-position caption</div>
+    <div id="bottom-caption" class="caption-window ytp-caption-window-bottom ytp-caption-window-rollup" style="left:30%;bottom:2%">Bottom roll-up caption</div>
+    <div id="positioned-caption" class="caption-window modern-caption" style="left:5%;bottom:35%">Custom-position modern caption</div>
     <div id="top-caption" class="caption-window" style="left:60%;top:8%">Authored top caption</div>
   </div>
 </div>
@@ -64,7 +66,7 @@
   const metadata = player.querySelector('.ytp-fullscreen-metadata');
   const quickActions = player.querySelector('.ytp-fullscreen-quick-actions');
   const grid = player.querySelector('.ytp-fullscreen-grid');
-  window.hoverFixture = { hovers: 0, leaves: 0, playerLeaves: 0, nativeHides: 0, nativeShows: 0, controlsDisabled: false, actions: 0, jumps: 0, offerJump: false, seeks: 0 };
+  window.hoverFixture = { checks: 0, hovers: 0, leaves: 0, playerLeaves: 0, nativeHides: 0, nativeShows: 0, controlsDisabled: false, actions: 0, jumps: 0, offerJump: false, seeks: 0 };
   player.hideControls = () => {
     hoverFixture.nativeHides += 1;
     hoverFixture.controlsDisabled = true;
@@ -78,7 +80,8 @@
     bar.style.display = ''; title.style.display = '';
   };
   let hideControls;
-  function wakeControls() {
+  function wakeControls(event) {
+    if (event?.type === "mousemove" && !event.isTrusted) hoverFixture.checks += 1;
     if (hoverFixture.controlsDisabled) return;
     player.classList.remove('ytp-autohide');
     bar.style.opacity = '1';

@@ -8,6 +8,7 @@
   const ENTRIES = "ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer, yt-guide-entry-view-model";
   const HIDDEN = "playback-plus-sidebar-hidden";
   const SHORTCUT = "playback-plus-watch-later";
+  const HEADINGS = 'h2, h3, [role="heading"], #header, #guide-section-title';
   let enabled = false;
   let hideShorts = false;
   let moveWatchLater = false;
@@ -56,15 +57,21 @@
     let hasShortcut = false;
 
     for (const root of document.querySelectorAll(ROOTS)) {
-      const subscription = [...root.querySelectorAll("a[href]")].find(link => destination(link)?.pathname === "/feed/subscriptions");
+      const subscriptions = [...root.querySelectorAll("a[href]")].filter(link => destination(link)?.pathname === "/feed/subscriptions");
+      // Expanded guides can link to Subscriptions from a section heading. That
+      // heading is a horizontal row, not a container for navigation shortcuts.
+      const subscription = subscriptions.find(link => !link.closest(HEADINGS)) || subscriptions[0];
       const entry = subscription?.closest(ENTRIES);
+      const anchor = subscription?.closest(HEADINGS)
+        ? subscription.closest("ytd-guide-section-renderer") || subscription.closest(HEADINGS)
+        : entry;
       let shortcut = root.querySelector(`.${SHORTCUT}`);
-      if (!enabled || !moveWatchLater || !entry) {
+      if (!enabled || !moveWatchLater || !anchor?.parentElement) {
         shortcut?.remove();
         continue;
       }
       if (!shortcut) shortcut = createShortcut(root.matches("ytd-mini-guide-renderer"), label);
-      if (entry.previousElementSibling !== shortcut) entry.before(shortcut);
+      if (anchor.previousElementSibling !== shortcut) anchor.before(shortcut);
       if (shortcut.title !== label) {
         shortcut.title = label;
         shortcut.setAttribute("aria-label", label);

@@ -125,3 +125,20 @@ test("Watch later preference restores You menu independently of Shorts and survi
   assert.equal(original.classList.contains(hidden), false);
   assert.equal(document.querySelector("[data-shorts]").classList.contains(hidden), true);
 });
+
+test("expanded subscription heading gets a standalone Watch later row outside the channel section", async t => {
+  const html = `<ytd-guide-renderer><div id="sections">
+    <ytd-guide-section-renderer><div id="items"><ytd-guide-entry-renderer><a href="/">Home</a></ytd-guide-entry-renderer></div></ytd-guide-section-renderer>
+    <ytd-guide-section-renderer id="channels"><h3 id="guide-section-title"><ytd-guide-entry-renderer><a href="/feed/subscriptions">Subscriptions</a></ytd-guide-entry-renderer></h3><div id="items"><ytd-guide-entry-renderer><a href="/@channel">Channel</a></ytd-guide-entry-renderer></div></ytd-guide-section-renderer>
+  </div></ytd-guide-renderer>`;
+  const { document, change } = await setup(t, html);
+  const link = document.querySelector(shortcut);
+  assert.equal(link.parentElement.id, "sections");
+  assert.equal(link.nextElementSibling.id, "channels");
+  assert.equal(document.querySelector("h3").textContent, "Subscriptions");
+  assert.equal(link.closest("h3"), null);
+  change({ youtubeWatchLaterShortcutEnabled: false });
+  await flush();
+  assert.equal(document.querySelector(shortcut), null);
+  assert.equal(document.querySelector("h3").textContent, "Subscriptions");
+});

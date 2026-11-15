@@ -35,6 +35,8 @@ The **Hide Shorts** setting also hides the sidebar's Shorts entry. In compact an
 expanded sidebars, **Watch later** appears directly above **Subscriptions**, followed
 by **You**, and its original entry in the You menu is hidden. Pausing the extension or
 YouTube tools restores the original sidebar.
+Subscription section headings are kept separate from the shortcut, so the expanded
+guide displays Watch later as its own full-width row without wrapping its label.
 Toggle **Watch later in sidebar** in the popup to restore Watch later to the You
 menu independently of Shorts filtering. Both preferences apply to open tabs.
 
@@ -43,7 +45,7 @@ The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing butt
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
 Playback events and a one-second fallback check work without animation frames or tab
 focus. During playback, the extension sends simulated movement to the video surface
-and brief timeline hover checks to reveal Jump ahead, without moving your cursor or
+or brief timeline hover checks (one strategy per check) to reveal Jump ahead, without moving your cursor or
 switching tabs. Timeline checks target the current playback position, suppress thumbnail
 previews, and send matching leave events after a skip or a 250 ms check window. Preview
 suppression remains while unattended. Genuine player input ends artificial timeline hover
@@ -64,7 +66,10 @@ controls. Video-surface pointer
 interaction expires after three idle seconds; intentional control-bar hover and held
 mouse buttons remain protected, so stale CSS `:hover` from
 another monitor cannot keep controls awake. Artificial hover also closes on window blur,
-focus changes, and tab visibility changes. Simulated movement stops
+and visible menus and keyboard-focused player controls remain protected past the idle
+timeout. Resizing, theater-mode layout changes and fullscreen transitions cancel stale
+timeline probes before new checks use the updated player geometry.
+Focus and tab visibility changes also end artificial hover. Simulated movement stops
 once that video has been skipped. The extension never clicks/drags the timeline or changes
 playback time itself.
 YouTube must accept the simulated event and expose the button; browser-frozen or
@@ -86,6 +91,8 @@ discarded tabs cannot run the content script, and background timers may be delay
   Keyboard interception starts before the site's native shortcuts, so the first
   arrow press uses five seconds even when Play or the timeline has focus. Volume,
   playback-speed sliders, menus, text entry and modified shortcuts stay native.
+  Rapid seeks accumulate their requested positions while the native UI is buffering;
+  new media, navigation and manual timeline interaction discard stale seek targets.
 
 - Replaces the in-player **1x** playback-speed menu with a YouTube-style slider,
   0.05x minus/plus controls, and 1x, 1.25x, 1.5x, 1.75x, 2x, and 3x presets.
@@ -185,3 +192,5 @@ without reloading the page. It uses a temporary extension copy with automatic sc
 loading disabled to model tabs that were open before installation.
 `npm run test:keys` checks the first arrow press and held-key repeats against an
 early native ten-second shortcut, including focus on Play and the timeline.
+`npm run test:sidebar` verifies full-width Watch later placement against an expanded
+guide with a horizontal subscription heading.

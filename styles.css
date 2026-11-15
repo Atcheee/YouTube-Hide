@@ -13,12 +13,22 @@ ytd-grid-video-renderer.hide-streamed-days-video {
   align-items: center;
   box-sizing: border-box;
   height: 40px;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
   padding: 0 12px;
   gap: 24px;
   border-radius: 10px;
   color: var(--yt-spec-text-primary, #f1f1f1);
   font: 400 14px Roboto, Arial, sans-serif;
   text-decoration: none;
+}
+
+.playback-plus-watch-later > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .playback-plus-watch-later:hover,

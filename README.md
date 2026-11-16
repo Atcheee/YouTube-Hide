@@ -77,6 +77,11 @@ discarded tabs cannot run the content script, and background timers may be delay
 
 ## Crunchyroll
 
+- Double-click the video surface to toggle fullscreen, using the player's native
+  fullscreen control when available. Controls, menus and modified clicks keep their
+  normal behavior. This works independently of the seek and J/K/L switches, and pauses
+  with the master or Crunchyroll enable switch.
+
 - Optional **5-second rewind/forward** switch sets the player's rewind/forward buttons
   and left/right arrows to five seconds. Button labels and icons show the new interval.
   A separate **Enable J/K/L shortcuts** switch enables J/L for ten seconds back/forward
@@ -172,6 +177,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
 - `crunchyroll-seek.js`: Optional five-second seek buttons and keyboard shortcuts.
 - `crunchyroll-player-bridge.js`: MAIN-world adapter for native player commands.
+- `crunchyroll-fullscreen.js`: Video-surface double-click fullscreen toggling.
 - `background.js`: Relays player-frame skip claims to the watch page's episode memory.
 
 ## Tests

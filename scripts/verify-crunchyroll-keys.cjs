@@ -58,6 +58,27 @@ const assert = require("node:assert/strict");
     await page.keyboard.press("ArrowRight");
     assert.equal(await page.evaluate(() => nativeArrows), 1);
     assert.equal(await page.locator("video").evaluate(video => video.currentTime), 20);
+    // Test routing to the app's fullscreen control. Headless Brave denies the
+    // actual fullscreen permission, so the fixture models the app's enter/exit state.
+    await page.evaluate(() => {
+      window.fullscreenToggles = 0;
+      const control = document.createElement('button');
+      control.id = 'fixture-fullscreen';
+      control.dataset.testid = 'fullscreen-button';
+      control.setAttribute('aria-label', 'Enter fullscreen');
+      control.textContent = 'Fullscreen';
+      control.addEventListener('click', () => {
+        fullscreenToggles++;
+        control.setAttribute('aria-label', fullscreenToggles % 2 ? 'Exit fullscreen' : 'Enter fullscreen');
+      });
+      document.getElementById('player-container').appendChild(control);
+    });
+    await page.locator('video').dblclick();
+    assert.equal(await page.evaluate(() => fullscreenToggles), 1);
+    assert.equal(await page.locator('#fixture-fullscreen').getAttribute('aria-label'), 'Exit fullscreen');
+    await page.locator('video').dblclick();
+    assert.equal(await page.evaluate(() => fullscreenToggles), 2);
+    await page.locator('#fixture-fullscreen').evaluate(control => control.remove());
     await page.evaluate(() => {
       const caption = document.createElement('div');
       caption.className = 'native-captions'; caption.textContent = 'Native caption';
@@ -91,6 +112,6 @@ const assert = require("node:assert/strict");
     await speed.press('Escape');
     assert.equal(await panel.isVisible(), false);
     assert.equal(await page.getByTestId('playback-speed-button').evaluate(button => document.activeElement === button), true);
-    console.log('Passed: first/repeated seeks, early native-capture conflicts, speed-dialog shortcut isolation, player-only resizes, native caption geometry, simulated fullscreen menu hosting, and Escape focus restoration.');
+    console.log('Passed: first/repeated seeks, double-click native fullscreen-control routing, speed-dialog shortcut isolation, player-only resizes, native caption geometry, simulated fullscreen menu hosting, and Escape focus restoration.');
   } finally { await context.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

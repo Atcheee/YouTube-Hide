@@ -36,8 +36,10 @@ h1 { margin: 0; font-size: 18px; letter-spacing: -.4px; font-weight: 700; }
 .site-tabs { display: flex; padding: 4px; gap: 4px; margin: 12px 0 10px; border-radius: 10px; background: var(--panel); }
 .site-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; }
 .site-tabs button[aria-selected="true"] { background: var(--raised); color: var(--fg); box-shadow: 0 1px 3px #0003; }
+.site-tabs button { padding-inline: 4px; gap: 4px; white-space: nowrap; }
 .youtube-symbol { color: #ff667d; font-size: 12px; }
 .crunchyroll-symbol { color: #fca263; font-size: 14px; font-weight: 800; }
+.site-icon { display: block; flex: none; border-radius: 3px; }
 fieldset { margin: 0; padding: 0; min-width: 0; border: 0; }
 legend, .group-label { margin: 0; padding: 0; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 650; }
 .settings-group > legend { padding-top: 10px; margin-bottom: 3px; }

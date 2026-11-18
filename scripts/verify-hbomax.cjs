@@ -32,6 +32,8 @@ const assert = require("node:assert/strict");
       <button id="forward" aria-label="10 seconds forward"><svg width="24" height="24" viewBox="0 0 24 24"><text x="6" y="16">10</text></svg></button>
       <div id="toolbar" style="display:flex;align-items:center;gap:8px"><button aria-label="Volume">Volume</button><span style="padding-bottom:24px"><button aria-label="Helskärm" style="display:grid"><svg width="20" height="20" aria-hidden="true"></svg></button></span></div>
       <button aria-label="Back" id="navigation">Back</button>
+      <input type="range" aria-label="Player timeline">
+      <input type="range" aria-label="Player volume" value="50">
       <input aria-label="Search">
       <div id="player-overlay" style="display:none;position:fixed;inset:0;z-index:2147483647;background:transparent"></div>
       <script>
@@ -41,10 +43,18 @@ const assert = require("node:assert/strict");
         window.introsSkipped = 0;
         window.videoSurfaceClicks = 0;
         window.nativeSpeedClicks = 0;
+        window.nativeArrowReleases = 0;
         const video = document.querySelector('video');
+        document.getElementById('back').onclick = () => video.currentTime -= 10;
         document.getElementById('forward').onclick = () => video.currentTime += 10;
         window.addEventListener('keydown', event => {
-          if (event.key === 'ArrowLeft') video.currentTime -= 10;
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            if (event.target.getAttribute?.('aria-label') === 'Player volume') return;
+            video.currentTime += event.key === 'ArrowLeft' ? -10 : 10;
+          }
+        }, true);
+        window.addEventListener('keyup', event => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') nativeArrowReleases++;
         }, true);
         window.addEventListener('click', event => {
           if (event.target.closest('#playback-plus-hbo-speed')) {
@@ -74,7 +84,7 @@ const assert = require("node:assert/strict");
     wave.writeUInt32LE(16, 16); wave.writeUInt16LE(1, 20); wave.writeUInt16LE(1, 22);
     wave.writeUInt32LE(16000, 24); wave.writeUInt32LE(32000, 28); wave.writeUInt16LE(2, 32);
     wave.writeUInt16LE(16, 34); wave.write("data", 36); wave.writeUInt32LE(wave.length - 44, 40);
-    const media = page.locator("video");
+    const media = page.locator("#player-container > video:not(#preview)");
     await media.evaluate((video, source) => { video.src = source; }, `data:audio/wav;base64,${wave.toString("base64")}`);
     await page.waitForFunction(() => document.querySelector("video").seekable.length > 0);
     const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
@@ -104,10 +114,59 @@ const assert = require("node:assert/strict");
     assert.equal(await media.evaluate(video => video.currentTime), 30);
     await page.keyboard.press("ArrowLeft");
     assert.equal(await media.evaluate(video => video.currentTime), 25);
+    const timeline = page.getByRole("slider", { name: "Player timeline" });
+    await timeline.press("ArrowLeft");
+    assert.equal(await media.evaluate(video => video.currentTime), 20);
+    await timeline.press("ArrowRight");
+    assert.equal(await media.evaluate(video => video.currentTime), 25);
+    assert.equal(await page.evaluate(() => nativeArrowReleases), 0);
+    const volume = page.getByRole("slider", { name: "Player volume" });
+    await volume.press("ArrowRight");
+    assert.equal(await volume.inputValue(), "51");
+    assert.equal(await media.evaluate(video => video.currentTime), 25);
+    await worker.evaluate(() => chrome.storage.sync.set({ hbomaxFiveSecondSeekEnabled: false }));
+    await page.getByRole("button", { name: "10 seconds forward", exact: true }).waitFor();
+    await timeline.press("ArrowRight");
+    assert.equal(await media.evaluate(video => video.currentTime), 35);
+    await timeline.press("ArrowLeft");
+    assert.equal(await media.evaluate(video => video.currentTime), 25);
+    await worker.evaluate(() => chrome.storage.sync.set({ hbomaxFiveSecondSeekEnabled: true }));
+    await page.getByRole("button", { name: "Forward 5 seconds", exact: true }).waitFor();
     await page.keyboard.press("j");
     assert.equal(await media.evaluate(video => video.currentTime), 15);
     await page.keyboard.press("l");
     assert.equal(await media.evaluate(video => video.currentTime), 25);
+    await media.evaluate(async video => {
+      const preview = document.createElement("video");
+      preview.id = "preview";
+      preview.style.cssText = "position:absolute;width:160px;height:90px";
+      preview.src = video.src;
+      video.before(preview);
+      await preview.play();
+    });
+    await timeline.press("j");
+    assert.equal(await media.evaluate(video => video.currentTime), 15);
+    await timeline.press("l");
+    assert.equal(await media.evaluate(video => video.currentTime), 25);
+    await page.locator("#preview").evaluate(preview => preview.remove());
+
+    const tabId = await worker.evaluate(async url => (await chrome.tabs.query({ url }))[0].id, url);
+    await worker.evaluate(tabId => chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const video = document.querySelector("#player-container > video");
+        Object.defineProperty(video, "seekable", { configurable: true, value: { length: 0 } });
+      }
+    }), tabId);
+    await timeline.press("j");
+    assert.equal(await media.evaluate(video => video.currentTime), 15);
+    await timeline.press("l");
+    assert.equal(await media.evaluate(video => video.currentTime), 25);
+    await worker.evaluate(tabId => chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => { delete document.querySelector("#player-container > video").seekable; }
+    }), tabId);
+    await timeline.blur();
     await page.keyboard.press("k");
     await page.waitForFunction(() => !document.querySelector("video").paused);
     await page.keyboard.press("k");
@@ -144,7 +203,6 @@ const assert = require("node:assert/strict");
       return Math.abs(center(button) - center(button.nextElementSibling.querySelector("svg")));
     });
     assert.ok(alignment <= 1, `Speed button sits ${alignment}px away from the fullscreen icon center`);
-    const tabId = await worker.evaluate(async url => (await chrome.tabs.query({ url }))[0].id, url);
     await worker.evaluate(tabId => chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -193,7 +251,7 @@ const assert = require("node:assert/strict");
     assert.ok(await media.evaluate(video => video.currentTime >= 35 && video.currentTime < 36));
     assert.equal(await page.locator("#playback-plus-hbo-speed").count(), 0);
     assert.deepEqual(errors, []);
-    console.log("HBO Max fixture passed: dimming toggle, seeking, keys, fullscreen routing, speed menu clicks through player overlays, low-buffer recovery, and intro skip.");
+    console.log("HBO Max fixture passed: five-second arrows with timeline focus, native arrows when disabled, volume slider isolation, J/L, fullscreen routing, speed, dimming, and intro skip.");
   } finally {
     await context.close();
   }

@@ -10,6 +10,7 @@
     "test:connection": "node scripts/verify-connection.cjs",
     "test:keys": "node scripts/verify-crunchyroll-keys.cjs",
     "test:hbomax": "node scripts/verify-hbomax.cjs",
+    "test:disneyplus": "node scripts/verify-disneyplus.cjs",
     "test:sidebar": "node scripts/verify-sidebar.cjs"
   },
   "devDependencies": {

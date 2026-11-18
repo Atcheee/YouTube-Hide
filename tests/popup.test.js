@@ -152,7 +152,7 @@ test("unsupported and lookalike domains retain settings access without showing p
   const page = setup(t, { url: "https://youtube.com.example.org/watch" });
   assert.equal(page.element("refresh-tab").hidden, true);
   assert.equal(page.element("diagnostics").hidden, true);
-  assert.equal(page.element("site-status").textContent, "YouTube, Crunchyroll & HBO Max");
+  assert.equal(page.element("site-status").textContent, "YouTube, Crunchyroll, HBO Max & Disney+");
   page.input("showSkipNotice").click();
   assert.equal(page.values.sync.showSkipNotice, false);
 });
@@ -183,18 +183,18 @@ test("Watch later sidebar switch saves independently, respects site pause, and r
   assert.equal(page.values.sync.youtubeWatchLaterShortcutEnabled, true);
 });
 
-for (const site of ["youtube", "crunchyroll"]) {
+for (const site of ["youtube", "crunchyroll", "disneyplus"]) {
   test(`${site} reconnects missing tools automatically without refreshing the tab`, t => {
     const page = setup(t, { url: `https://www.${site}.com/watch/example`, stale: true, recover: true });
     assert.match(page.element("site-status").textContent, /Connected/);
     assert.equal(page.element("refresh-hint").hidden, true);
     assert.equal(page.reloads.length, 0);
-    assert.equal(page.injections.length, site === "crunchyroll" ? 3 : 2);
+    assert.equal(page.injections.length, site === "youtube" ? 2 : 3);
     const target = page.injections.at(-1).js.target;
     assert.equal(target.tabId, 7);
     assert.equal(target.allFrames, site === "crunchyroll");
     assert.equal(page.injections.at(-1).js.files[0], "settings.js");
-    if (site === "crunchyroll") assert.equal(page.injections[0].js.world, "MAIN");
+    if (site !== "youtube") assert.equal(page.injections[0].js.world, "MAIN");
   });
 }
 

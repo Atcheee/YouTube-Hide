@@ -2,16 +2,23 @@
   "use strict";
 
   const settings = PlaybackPlusSettings;
-  const speedKey = "crunchyrollPlaybackSpeed";
   const toggles = [...document.querySelectorAll("[data-setting]")];
   const tabs = [...document.querySelectorAll('[role="tab"]')];
-  const slider = document.getElementById("playback-speed");
+  const speedControls = [...document.querySelectorAll("[data-speed-site]")].map(group => ({
+    group,
+    site: group.dataset.speedSite,
+    key: group.dataset.speedSite + "PlaybackSpeed",
+    slider: group.querySelector("input"),
+    output: group.querySelector("output"),
+    presets: group.querySelectorAll("[data-speed]"),
+    savedRate: 1,
+    revision: 0
+  }));
   const saveStatus = document.getElementById("save-status");
   let state;
   let activeTab;
   let activeSite;
   let speedReady = false;
-  let speedRevision = 0;
   let selectedByUser = false;
   let diagnosticRequest = 0;
 
@@ -25,12 +32,12 @@
     return Number.isFinite(rate) ? Math.round(Math.max(.25, Math.min(4, rate)) * 20) / 20 : 1;
   }
 
-  function renderSpeed(value) {
+  function renderSpeed(control, value) {
     const rate = normalizeRate(value);
-    slider.value = String(rate);
-    document.getElementById("speed-value").textContent = `${rate}x`;
-    slider.setAttribute("aria-valuetext", `${rate} times normal speed`);
-    for (const button of document.querySelectorAll("[data-speed]")) {
+    control.slider.value = String(rate);
+    control.output.textContent = `${rate}x`;
+    control.slider.setAttribute("aria-valuetext", `${rate} times normal speed`);
+    for (const button of control.presets) {
       button.setAttribute("aria-pressed", String(Number(button.dataset.speed) === rate));
     }
   }
@@ -44,7 +51,8 @@
     document.getElementById("youtube-options").disabled = !state.extensionEnabled || !state.youtubeEnabled;
     document.getElementById("crunchyroll-options").disabled = !state.extensionEnabled || !state.crunchyrollEnabled;
     document.getElementById("hbomax-options").disabled = !state.extensionEnabled || !state.hbomaxEnabled;
-    document.getElementById("speed-controls").disabled = !speedReady || !state.crunchyrollSpeedEnabled;
+    document.getElementById("disneyplus-options").disabled = !state.extensionEnabled || !state.disneyplusEnabled;
+    for (const control of speedControls) control.group.disabled = !speedReady || !state[control.site + "SpeedEnabled"];
     document.getElementById("general-options").disabled = !state.extensionEnabled;
     document.getElementById("paused-hint").hidden = state.extensionEnabled;
     document.getElementById("reset-settings").disabled = !speedReady;
@@ -93,26 +101,29 @@
     });
   }
 
-  let savedRate = 1;
-  function saveRate(value) {
-    speedRevision += 1;
+  function saveRate(control, value) {
+    const revision = ++control.revision;
     const rate = normalizeRate(value);
-    const previous = savedRate;
-    savedRate = rate;
-    renderSpeed(rate);
-    persist("local", { [speedKey]: rate }, () => { savedRate = previous; renderSpeed(previous); });
+    const previous = control.savedRate;
+    control.savedRate = rate;
+    renderSpeed(control, rate);
+    persist("local", { [control.key]: rate }, () => {
+      if (control.revision !== revision) return;
+      control.savedRate = previous;
+      renderSpeed(control, previous);
+    });
   }
-  slider.addEventListener("input", () => renderSpeed(slider.value));
-  slider.addEventListener("change", () => saveRate(slider.value));
-  for (const button of document.querySelectorAll("[data-speed]")) {
-    button.addEventListener("click", () => saveRate(button.dataset.speed));
+  for (const control of speedControls) {
+    control.slider.addEventListener("input", () => renderSpeed(control, control.slider.value));
+    control.slider.addEventListener("change", () => saveRate(control, control.slider.value));
+    for (const button of control.presets) button.addEventListener("click", () => saveRate(control, button.dataset.speed));
   }
   document.getElementById("reset-settings").addEventListener("click", () => {
     // Reset only our preferences; preserve unrelated storage and one-time skip memory.
     feedback("Resetting…");
     chrome.storage.sync.set({ ...settings.defaults }, () => {
       if (chrome.runtime.lastError) { feedback("Could not reset. Try again.", true); return; }
-      persist("local", { [speedKey]: 1, hbomaxPlaybackSpeed: 1 });
+      persist("local", { crunchyrollPlaybackSpeed: 1, hbomaxPlaybackSpeed: 1, disneyplusPlaybackSpeed: 1 });
     });
   });
 
@@ -123,6 +134,7 @@
       if (url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com")) return "youtube";
       if (url.hostname === "crunchyroll.com" || url.hostname.endsWith(".crunchyroll.com")) return "crunchyroll";
       if (url.hostname === "hbomax.com" || url.hostname.endsWith(".hbomax.com")) return "hbomax";
+      if (url.hostname === "disneyplus.com" || url.hostname.endsWith(".disneyplus.com")) return "disneyplus";
     } catch { /* An empty/new tab has no supported site. */ }
     return null;
   }
@@ -177,10 +189,10 @@
     const dot = document.getElementById("connection-dot");
     dot.dataset.state = connectionState;
     if (!activeSite) {
-      status.textContent = "YouTube, Crunchyroll & HBO Max";
+      status.textContent = "YouTube, Crunchyroll, HBO Max & Disney+";
       detail.textContent = "Open a supported video tab to use player tools.";
     } else {
-      const name = { youtube: "YouTube", crunchyroll: "Crunchyroll", hbomax: "HBO Max" }[activeSite];
+      const name = { youtube: "YouTube", crunchyroll: "Crunchyroll", hbomax: "HBO Max", disneyplus: "Disney+" }[activeSite];
       const enabled = state?.extensionEnabled && state[`${activeSite}Enabled`];
       status.textContent = `${name} · ${state && !enabled ? "Paused" : connectionState === "connected" ? "Connected" : connectionState === "refresh" ? "Refresh needed" : "Connecting…"}`;
       detail.textContent = state && !enabled ? "Enable tools to resume with your saved preferences." :
@@ -214,20 +226,24 @@
   });
 
   settings.subscribe((next) => { state = next; render(); });
-  const initialSpeedRevision = speedRevision;
-  chrome.storage.local.get({ [speedKey]: 1 }, (result) => {
+  const initialRevisions = speedControls.map(control => control.revision);
+  chrome.storage.local.get(Object.fromEntries(speedControls.map(control => [control.key, 1])), (result) => {
     const failed = Boolean(chrome.runtime.lastError);
-    if (speedRevision === initialSpeedRevision) savedRate = normalizeRate(failed ? 1 : result?.[speedKey] ?? 1);
-    renderSpeed(savedRate);
+    for (const [index, control] of speedControls.entries()) {
+      if (control.revision === initialRevisions[index]) control.savedRate = normalizeRate(failed ? 1 : result?.[control.key] ?? 1);
+      renderSpeed(control, control.savedRate);
+    }
     speedReady = true;
     render();
     feedback(failed ? "Could not load speed." : "Settings saved automatically", failed);
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && Object.hasOwn(changes, speedKey)) {
-      speedRevision += 1;
-      savedRate = normalizeRate(changes[speedKey].newValue ?? 1);
-      renderSpeed(savedRate);
+    if (area !== "local") return;
+    for (const control of speedControls) {
+      if (!Object.hasOwn(changes, control.key)) continue;
+      control.revision += 1;
+      control.savedRate = normalizeRate(changes[control.key].newValue ?? 1);
+      renderSpeed(control, control.savedRate);
     }
   });
   document.getElementById("version").textContent = `v${chrome.runtime.getManifest().version}`;

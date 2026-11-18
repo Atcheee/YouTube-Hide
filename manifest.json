@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Playback Plus",
-  "version": "2.0.22",
-  "description": "Player tools for YouTube, Crunchyroll, and HBO Max: skipping, playback speed, and shortcuts.",
+  "version": "2.0.35",
+  "description": "Player tools for YouTube, Crunchyroll, HBO Max, and Disney+: skipping, playback speed, and shortcuts.",
   "permissions": [
     "storage",
     "activeTab",
@@ -11,7 +11,8 @@
   "host_permissions": [
     "*://youtube.com/*", "*://*.youtube.com/*",
     "*://crunchyroll.com/*", "*://*.crunchyroll.com/*",
-    "*://hbomax.com/*", "*://*.hbomax.com/*"
+    "*://hbomax.com/*", "*://*.hbomax.com/*",
+    "*://disneyplus.com/*", "*://*.disneyplus.com/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",
@@ -35,7 +36,19 @@
   "content_scripts": [
     {
       "matches": ["*://hbomax.com/*", "*://*.hbomax.com/*"],
-      "js": ["settings.js", "hbomax-player.js", "crunchyroll-playback-speed.js"],
+      "js": ["settings.js", "streaming-player.js", "crunchyroll-playback-speed.js"],
+      "css": ["crunchyroll.css", "hbomax.css"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://disneyplus.com/*", "*://*.disneyplus.com/*"],
+      "js": ["disneyplus-player-bridge.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://disneyplus.com/*", "*://*.disneyplus.com/*"],
+      "js": ["settings.js", "disneyplus-styles.js", "streaming-player.js", "crunchyroll-playback-speed.js"],
       "css": ["crunchyroll.css", "hbomax.css"],
       "run_at": "document_start"
     },

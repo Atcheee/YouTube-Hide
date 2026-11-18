@@ -4,9 +4,10 @@
   const settingsContext = PlaybackPlusSettings;
   if (settingsContext.install && !settingsContext.install("crunchyroll-playback-speed")) return;
 
-  const hbo = globalThis.PlaybackPlusHboPlayer;
-  const STORAGE_KEY = hbo ? "hbomaxPlaybackSpeed" : "crunchyrollPlaybackSpeed";
-  const BUTTON_SELECTOR = hbo ? "#playback-plus-hbo-speed" : '[data-testid="playback-speed-button"], button[aria-label="Playback Speed Menu"]';
+  const streaming = globalThis.PlaybackPlusStreamingPlayer;
+  const disney = streaming?.site === "disneyplus";
+  const STORAGE_KEY = streaming ? streaming.site + "PlaybackSpeed" : "crunchyrollPlaybackSpeed";
+  const BUTTON_SELECTOR = streaming ? "#" + streaming.speedId : '[data-testid="playback-speed-button"], button[aria-label="Playback Speed Menu"]';
   const MIN_RATE = 0.25;
   const MAX_RATE = 4;
   const STEP = 0.05;
@@ -30,6 +31,8 @@
   let plus;
   let error;
   let activeButton = null;
+  let speedPress;
+  let lastPointerActivation;
   let lastPath = location.pathname;
   let enabled = false;
   const panelResizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(positionPanel) : null;
@@ -40,7 +43,7 @@
   }
 
   function formatRate(rate) {
-    return `${Number(rate.toFixed(2))}x`;
+    return `${Number(rate.toFixed(2))}${disney ? "×" : "x"}`;
   }
 
   function allElements(selector) {
@@ -71,11 +74,11 @@
   }
 
   function displayedRate(video = primaryVideo()) {
-    if (hbo && videoStates.get(video)?.bufferLimited) return selectedRate;
+    if (streaming && videoStates.get(video)?.bufferLimited) return selectedRate;
     return video?.playbackRate || selectedRate;
   }
 
-  function hboTargetRate(video, state) {
+  function bufferAwareRate(video, state) {
     if (selectedRate <= 1) state.bufferLimited = false;
     if (selectedRate > 1 && !video.paused && !video.seeking && !video.ended && video.readyState >= 2) {
       const position = video.currentTime;
@@ -103,25 +106,25 @@
   function applyRate(video) {
     if (settingsContext.isActive?.() === false) return;
     if (!enabled || !hasPreference) return;
-    if (hbo && (!video.isConnected || !videos.includes(video) || location.pathname !== lastPath)) return;
+    if (streaming && (!video.isConnected || !videos.includes(video) || location.pathname !== lastPath)) return;
     const state = videoStates.get(video);
     const wasBufferLimited = state.bufferLimited;
-    const targetRate = hbo ? hboTargetRate(video, state) : selectedRate;
-    if (Math.abs(video.playbackRate - targetRate) < 0.001 && (hbo ||
+    const targetRate = streaming ? bufferAwareRate(video, state) : selectedRate;
+    if (Math.abs(video.playbackRate - targetRate) < 0.001 && (streaming ||
         Math.abs(video.defaultPlaybackRate - selectedRate) < 0.001)) return;
     if (state.blocked) return;
     const now = Date.now();
     if (wasBufferLimited !== state.bufferLimited || now - state.lastAttempt > 2000) state.attempts = 0;
     if (state.attempts >= 5) {
       state.blocked = true;
-      showError(`Another speed controller keeps restoring ${formatRate(video.playbackRate)}. Disable ${hbo ? "other speed extensions" : "Crunchyroll Speeder or other speed extensions"}, then refresh this tab.`);
+      showError(`Another speed controller keeps restoring ${formatRate(video.playbackRate)}. Disable ${streaming ? "other speed extensions" : "Crunchyroll Speeder or other speed extensions"}, then refresh this tab.`);
       return;
     }
     state.attempts += 1;
     state.lastAttempt = now;
     try {
       // Change the media itself, including rates missing from Crunchyroll's menu.
-      if (!hbo) video.defaultPlaybackRate = selectedRate;
+      if (!streaming) video.defaultPlaybackRate = selectedRate;
       if (Math.abs(video.playbackRate - targetRate) >= 0.001) video.playbackRate = targetRate;
     } catch {
       showError("This player could not apply that playback speed.");
@@ -133,7 +136,7 @@
     if (!enabled) return;
     const media = primaryVideo();
     const rate = displayedRate(media);
-    const easingSpeed = hbo && videoStates.get(media)?.bufferLimited && media.playbackRate === 1;
+    const easingSpeed = streaming && videoStates.get(media)?.bufferLimited && media.playbackRate === 1;
     const buttonRate = formatRate(easingSpeed ? media.playbackRate : rate);
     for (const button of buttons) {
       if (!buttonAttributes.has(button)) {
@@ -141,7 +144,7 @@
           .map((name) => [name, button.getAttribute(name)])));
       }
       if (button.textContent !== buttonRate) button.textContent = buttonRate;
-      if (hbo) setAttribute(button, "title", easingSpeed
+      if (streaming) setAttribute(button, "title", easingSpeed
         ? `Playing at 1x while buffering. Will resume at ${formatRate(rate)}.` : "Playback speed");
       setAttribute(button, "aria-haspopup", "dialog");
       setAttribute(button, "aria-expanded", String(activeButton === button && panel && !panel.hidden));
@@ -180,7 +183,7 @@
     panelResizeObserver?.disconnect();
     if (!panel || panel.hidden) return;
     const opener = activeButton;
-    if (hbo && panel.hidePopover && panel.matches(":popover-open")) panel.hidePopover();
+    if (streaming && panel.hidePopover && panel.matches(":popover-open")) panel.hidePopover();
     panel.hidden = true;
     activeButton = null;
     render();
@@ -191,9 +194,14 @@
     if (settingsContext.isActive?.() === false) return;
     if (!activeButton || !panel || panel.hidden) return;
     if (!activeButton.isConnected) { closePanel(); return; }
-    const host = document.fullscreenElement || document.body;
+    let host = document.fullscreenElement || document.body;
+    if (disney) {
+      // A popover outside Disney's modal player is inert even when it is open.
+      const modal = document.querySelector("dialog:modal");
+      host = modal || document.body;
+    }
     if (panel.parentElement !== host) host.appendChild(panel);
-    if (hbo && panel.showPopover && !panel.matches(":popover-open")) panel.showPopover();
+    if (streaming && panel.showPopover && !panel.matches(":popover-open")) panel.showPopover();
     const anchor = activeButton.getBoundingClientRect();
     const bounds = panel.getBoundingClientRect();
     const width = bounds.width || Math.min(390, window.innerWidth - 24);
@@ -220,7 +228,8 @@
     panel.id = "youtube-hide-crunchyroll-speed";
     panel.className = "youtube-hide-speed-panel";
     panel.hidden = true;
-    if (hbo && panel.showPopover) panel.setAttribute("popover", "manual");
+    if (disney) panel.tabIndex = -1;
+    if (streaming && panel.showPopover) panel.setAttribute("popover", "manual");
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Playback speed");
     panel.innerHTML = `
@@ -267,13 +276,15 @@
     }
   }
 
-  function onClick(event) {
+  function onClick(event, directButton) {
     if (settingsContext.isActive?.() === false) return;
     if (!enabled) return;
-    const button = event.composedPath().find((node) => node instanceof Element && node.matches(BUTTON_SELECTOR));
+    const path = directButton ? [] : streaming ? streaming.eventPath(event) : event.composedPath();
+    const button = directButton || path.find((node) => node instanceof Element && node.matches(BUTTON_SELECTOR));
     if (!button || button.matches(':disabled, [aria-disabled="true"]')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (streaming && !buttons.includes(button)) scan();
     if (!panel) buildPanel();
     if (activeButton === button && !panel.hidden) { closePanel(); return; }
     activeButton = button;
@@ -285,7 +296,57 @@
     panelResizeObserver?.observe(button);
     const player = button.closest("#player-container, #player, #vilos, .video-player-wrapper");
     if (player) panelResizeObserver?.observe(player);
-    slider.focus({ preventScroll: true });
+    const openedWithPointer = disney && (event.type === "pointerup" || event.detail > 0);
+    const focusTarget = openedWithPointer ? panel : slider;
+    focusTarget.focus({ preventScroll: true });
+  }
+
+  function disneySpeedAtPoint(event) {
+    const button = streaming.speedButton();
+    if (!button?.isConnected || !button.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
+    const rect = button.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) return null;
+    // The controls can be visible beneath an overlay that owns the hit test.
+    // Use the button's bounds, but leave open menus and dialogs interactive.
+    const path = streaming.eventPath(event);
+    if (path.includes(panel) || path.some(node => node instanceof Element && node.matches('[role="menu"], [role="menuitem"]'))) return null;
+    return button;
+  }
+
+  function handleDisneyPointer(event) {
+    if (settingsContext.isActive?.() === false || !enabled || !event.isTrusted) return;
+    if (event.type === "pointerdown") {
+      if (!event.isPrimary || event.button !== 0) return;
+      const button = disneySpeedAtPoint(event);
+      speedPress = button ? { button, id: event.pointerId } : null;
+      if (speedPress) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+    if (speedPress?.id !== event.pointerId) return;
+    const { button } = speedPress;
+    speedPress = null;
+    if (event.type !== "pointerup") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (disneySpeedAtPoint(event) !== button) return;
+    lastPointerActivation = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    onClick(event, button);
+  }
+
+  function onDisneyClick(event) {
+    if (settingsContext.isActive?.() === false || !enabled) return;
+    if (event.isTrusted && event.detail > 0 && lastPointerActivation &&
+        event.timeStamp - lastPointerActivation.time < 500 &&
+        Math.hypot(event.clientX - lastPointerActivation.x, event.clientY - lastPointerActivation.y) <= 4) {
+      lastPointerActivation = null;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    onClick(event);
   }
 
   function scan() {
@@ -296,18 +357,18 @@
       if (!button.isConnected) buttonAttributes.delete(button);
     }
     if (location.pathname !== lastPath) { lastPath = location.pathname; closePanel(); }
-    videos = hbo ? [hbo.video()].filter(Boolean) : allElements("video");
-    buttons = hbo ? [...document.querySelectorAll(BUTTON_SELECTOR)] : allElements(BUTTON_SELECTOR);
+    videos = streaming ? [streaming.video()].filter(Boolean) : allElements("video");
+    buttons = streaming ? [streaming.speedButton()].filter(button => button?.isConnected) : allElements(BUTTON_SELECTOR);
     for (const video of videos) {
       if (!videoStates.has(video)) {
         const state = { attempts: 0, lastAttempt: 0, blocked: false, bufferLimited: false };
         videoStates.set(video, state);
         const events = ["loadedmetadata", "play", "playing", "ratechange"];
-        if (hbo) events.push("timeupdate", "progress", "waiting", "seeked");
+        if (streaming) events.push("timeupdate", "progress", "waiting", "seeked");
         for (const event of events) {
           video.addEventListener(event, () => {
             const previousLimit = state.bufferLimited;
-            if (event === "loadedmetadata" || (!hbo && event !== "ratechange")) {
+            if (event === "loadedmetadata" || (!streaming && event !== "ratechange")) {
               state.attempts = 0;
               state.blocked = false;
               state.bufferLimited = false;
@@ -333,7 +394,7 @@
   function init() {
     observer = new MutationObserver(scheduleScan);
     PlaybackPlusSettings.subscribe((settings) => {
-      const next = settings.extensionEnabled && (hbo ? settings.hbomaxEnabled && settings.hbomaxSpeedEnabled : settings.crunchyrollEnabled && settings.crunchyrollSpeedEnabled);
+      const next = settings.extensionEnabled && (streaming ? settings[streaming.site + "Enabled"] && settings[streaming.site + "SpeedEnabled"] : settings.crunchyrollEnabled && settings.crunchyrollSpeedEnabled);
       if (next === enabled) return;
       enabled = next;
       if (!enabled) {
@@ -354,9 +415,11 @@
       }
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-    if (!hbo) document.addEventListener("click", onClick, true);
+    if (!streaming) document.addEventListener("click", onClick, true);
     document.addEventListener("pointerdown", (event) => {
-      if (panel && !panel.hidden && !event.composedPath().includes(panel) && !event.composedPath().includes(activeButton)) closePanel();
+      if (!panel || panel.hidden) return;
+      const path = streaming ? streaming.eventPath(event) : event.composedPath();
+      if (!path.includes(panel) && !path.includes(activeButton)) closePanel();
     }, true);
     document.addEventListener("keydown", (event) => {
       if (!panel || panel.hidden || !event.composedPath().includes(panel)) return;
@@ -374,7 +437,10 @@
       request.preventDefault();
       handlePanelKey(key, request.composedPath().find(node => node instanceof Element));
     }, true);
-    document.addEventListener("fullscreenchange", positionPanel);
+    document.addEventListener("fullscreenchange", () => {
+      if (disney && panel?.hidePopover && panel.matches(":popover-open")) panel.hidePopover();
+      positionPanel();
+    });
     window.addEventListener("resize", positionPanel);
     window.addEventListener("scroll", positionPanel, true);
     window.addEventListener("popstate", scheduleScan);
@@ -397,8 +463,14 @@
     scheduleScan();
   }
 
-  // Let the HBO Max speed button handle clicks before the player can consume them.
-  if (hbo) window.addEventListener("click", onClick, true);
+  // Let the streaming speed button handle clicks before the player can consume them.
+  if (disney) {
+    streaming.setSpeedButtonHandler(onClick);
+    for (const event of ["pointerdown", "pointerup", "pointercancel"]) {
+      window.addEventListener(event, handleDisneyPointer, { capture: true, passive: false });
+    }
+    window.addEventListener("click", onDisneyClick, true);
+  } else if (streaming) window.addEventListener("click", onClick, true);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();

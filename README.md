@@ -1,6 +1,6 @@
 # Playback Plus
 
-Player tools for **YouTube and Crunchyroll**, in one Manifest V3 extension for Brave
+Player tools for **YouTube, Crunchyroll, HBO Max, and Disney+**, in one Manifest V3 extension for Brave
 and Chrome. Previously called YouTube Hide; updating keeps your existing settings.
 
 ## Popup settings
@@ -12,7 +12,11 @@ and Chrome. Previously called YouTube Hide; updating keeps your existing setting
   Change saved speed directly in the popup with a 0.25x–4x slider and common presets;
   it shares the same local preference as the in-player picker. Turning the picker off
   releases speed enforcement and restores native button behavior, keeping the current rate.
-- **Both sites:** turn the centered skip notice on or off. Pausing and resuming tools
+- **HBO Max and Disney+:** toggle the in-player speed picker, five-second seeks, J/K/L,
+  automatic intro skipping, and removal of the dark player overlay. Double-click the
+  video or press F to toggle fullscreen. Each service remembers its own speed and
+  temporarily returns to 1× when the playback buffer runs low.
+- **All sites:** turn the centered skip notice on or off. Pausing and resuming tools
   keeps the current page's one-time skip memory intact.
 - Current-tab connection status, a refresh button, expandable Crunchyroll player status,
   and reset-to-defaults are included. Reset changes only this extension's preferences.
@@ -143,7 +147,7 @@ discarded tabs cannot run the content script, and background timers may be delay
   storage. Crunchyroll's selected playback speed remains local to this browser.
 - Hides only matching cards/sections; it does not remove or alter videos in your account.
 - Needs the `storage` permission so the toggles can persist across sessions.
-- Uses `scripting` and access to YouTube/Crunchyroll pages to reconnect tools in
+- Uses `scripting` and access to supported sites to reconnect tools in
   already-open tabs. Healthy tabs keep their existing tools and skip memory.
 
 ## Install in Brave
@@ -152,7 +156,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Open the extension popup in already-open YouTube or Crunchyroll tabs to connect automatically.
+5. Open the extension popup in already-open supported tabs to connect automatically.
 
 ## Install in Chrome
 
@@ -160,11 +164,11 @@ discarded tabs cannot run the content script, and background timers may be delay
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project folder.
-5. Open the extension popup in already-open YouTube or Crunchyroll tabs to connect automatically.
+5. Open the extension popup in already-open supported tabs to connect automatically.
 
 ## Files
 
-- `manifest.json`: Manifest V3 registration for both sites, popup, and storage.
+- `manifest.json`: Manifest V3 registration for supported sites, popup, and storage.
 - `popup.html` / `popup.js` / `popup.css`: Site settings, speed controls, and connection status.
 - `settings.js`: Shared settings defaults, initial loading, and live storage updates.
 - `icons/`: Amber fast-forward icon for the toolbar, extension manager, and popup.
@@ -175,6 +179,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.
 - `crunchyroll-playback-speed.js`: In-player playback-speed picker and saved media rate.
+- `streaming-player.js`: HBO Max and Disney+ player controls, intro skipping, and overlay toggles.
 - `crunchyroll-seek.js`: Optional five-second seek buttons and keyboard shortcuts.
 - `crunchyroll-player-bridge.js`: MAIN-world adapter for native player commands.
 - `crunchyroll-fullscreen.js`: Video-surface double-click fullscreen toggling.

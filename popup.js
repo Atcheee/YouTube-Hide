@@ -43,6 +43,7 @@
     }
     document.getElementById("youtube-options").disabled = !state.extensionEnabled || !state.youtubeEnabled;
     document.getElementById("crunchyroll-options").disabled = !state.extensionEnabled || !state.crunchyrollEnabled;
+    document.getElementById("hbomax-options").disabled = !state.extensionEnabled || !state.hbomaxEnabled;
     document.getElementById("speed-controls").disabled = !speedReady || !state.crunchyrollSpeedEnabled;
     document.getElementById("general-options").disabled = !state.extensionEnabled;
     document.getElementById("paused-hint").hidden = state.extensionEnabled;
@@ -111,7 +112,7 @@
     feedback("Resetting…");
     chrome.storage.sync.set({ ...settings.defaults }, () => {
       if (chrome.runtime.lastError) { feedback("Could not reset. Try again.", true); return; }
-      saveRate(1);
+      persist("local", { [speedKey]: 1, hbomaxPlaybackSpeed: 1 });
     });
   });
 
@@ -121,6 +122,7 @@
       if (!/^https?:$/.test(url.protocol)) return null;
       if (url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com")) return "youtube";
       if (url.hostname === "crunchyroll.com" || url.hostname.endsWith(".crunchyroll.com")) return "crunchyroll";
+      if (url.hostname === "hbomax.com" || url.hostname.endsWith(".hbomax.com")) return "hbomax";
     } catch { /* An empty/new tab has no supported site. */ }
     return null;
   }
@@ -175,10 +177,10 @@
     const dot = document.getElementById("connection-dot");
     dot.dataset.state = connectionState;
     if (!activeSite) {
-      status.textContent = "YouTube + Crunchyroll";
+      status.textContent = "YouTube, Crunchyroll & HBO Max";
       detail.textContent = "Open a supported video tab to use player tools.";
     } else {
-      const name = activeSite === "youtube" ? "YouTube" : "Crunchyroll";
+      const name = { youtube: "YouTube", crunchyroll: "Crunchyroll", hbomax: "HBO Max" }[activeSite];
       const enabled = state?.extensionEnabled && state[`${activeSite}Enabled`];
       status.textContent = `${name} · ${state && !enabled ? "Paused" : connectionState === "connected" ? "Connected" : connectionState === "refresh" ? "Refresh needed" : "Connecting…"}`;
       detail.textContent = state && !enabled ? "Enable tools to resume with your saved preferences." :

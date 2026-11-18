@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Playback Plus",
-  "version": "2.0.15",
-  "description": "Player tools for YouTube and Crunchyroll: one-time auto-skip, custom playback speed, and a cleaner YouTube feed.",
+  "version": "2.0.22",
+  "description": "Player tools for YouTube, Crunchyroll, and HBO Max: skipping, playback speed, and shortcuts.",
   "permissions": [
     "storage",
     "activeTab",
@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "*://youtube.com/*", "*://*.youtube.com/*",
-    "*://crunchyroll.com/*", "*://*.crunchyroll.com/*"
+    "*://crunchyroll.com/*", "*://*.crunchyroll.com/*",
+    "*://hbomax.com/*", "*://*.hbomax.com/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",
@@ -32,6 +33,12 @@
     "service_worker": "background.js"
   },
   "content_scripts": [
+    {
+      "matches": ["*://hbomax.com/*", "*://*.hbomax.com/*"],
+      "js": ["settings.js", "hbomax-player.js", "crunchyroll-playback-speed.js"],
+      "css": ["crunchyroll.css", "hbomax.css"],
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "*://youtube.com/*",

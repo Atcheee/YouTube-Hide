@@ -4,12 +4,15 @@
   const settingsContext = PlaybackPlusSettings;
   if (settingsContext.install && !settingsContext.install("crunchyroll-playback-speed")) return;
 
-  const STORAGE_KEY = "crunchyrollPlaybackSpeed";
-  const BUTTON_SELECTOR = '[data-testid="playback-speed-button"], button[aria-label="Playback Speed Menu"]';
+  const hbo = globalThis.PlaybackPlusHboPlayer;
+  const STORAGE_KEY = hbo ? "hbomaxPlaybackSpeed" : "crunchyrollPlaybackSpeed";
+  const BUTTON_SELECTOR = hbo ? "#playback-plus-hbo-speed" : '[data-testid="playback-speed-button"], button[aria-label="Playback Speed Menu"]';
   const MIN_RATE = 0.25;
   const MAX_RATE = 4;
   const STEP = 0.05;
   const PRESETS = [1, 1.25, 1.5, 1.75, 2, 3];
+  const LOW_BUFFER_SECONDS = 2;
+  const RECOVERED_BUFFER_SECONDS = 8;
   const videoStates = new WeakMap();
   const buttonAttributes = new Map();
   const observedRoots = new WeakSet();
@@ -67,8 +70,28 @@
     return player?.querySelector("video") || videos.find((video) => !video.paused) || videos[0];
   }
 
-  function displayedRate() {
-    return primaryVideo()?.playbackRate || selectedRate;
+  function displayedRate(video = primaryVideo()) {
+    if (hbo && videoStates.get(video)?.bufferLimited) return selectedRate;
+    return video?.playbackRate || selectedRate;
+  }
+
+  function hboTargetRate(video, state) {
+    if (selectedRate <= 1) state.bufferLimited = false;
+    if (selectedRate > 1 && !video.paused && !video.seeking && !video.ended && video.readyState >= 2) {
+      const position = video.currentTime;
+      const ranges = video.buffered;
+      let bufferedEnd = position;
+      for (let i = 0; i < ranges.length; i += 1) {
+        if (ranges.start(i) <= position && position <= ranges.end(i)) {
+          bufferedEnd = ranges.end(i);
+          break;
+        }
+      }
+      const bufferedToEnd = Number.isFinite(video.duration) && bufferedEnd >= video.duration - 0.1;
+      const threshold = state.bufferLimited ? RECOVERED_BUFFER_SECONDS : LOW_BUFFER_SECONDS;
+      state.bufferLimited = !bufferedToEnd && bufferedEnd - position < threshold * selectedRate;
+    }
+    return state.bufferLimited ? 1 : selectedRate;
   }
 
   function showError(message = "") {
@@ -80,23 +103,26 @@
   function applyRate(video) {
     if (settingsContext.isActive?.() === false) return;
     if (!enabled || !hasPreference) return;
+    if (hbo && (!video.isConnected || !videos.includes(video) || location.pathname !== lastPath)) return;
     const state = videoStates.get(video);
-    if (Math.abs(video.playbackRate - selectedRate) < 0.001 &&
-        Math.abs(video.defaultPlaybackRate - selectedRate) < 0.001) return;
+    const wasBufferLimited = state.bufferLimited;
+    const targetRate = hbo ? hboTargetRate(video, state) : selectedRate;
+    if (Math.abs(video.playbackRate - targetRate) < 0.001 && (hbo ||
+        Math.abs(video.defaultPlaybackRate - selectedRate) < 0.001)) return;
     if (state.blocked) return;
     const now = Date.now();
-    if (now - state.lastAttempt > 2000) state.attempts = 0;
+    if (wasBufferLimited !== state.bufferLimited || now - state.lastAttempt > 2000) state.attempts = 0;
     if (state.attempts >= 5) {
       state.blocked = true;
-      showError(`Another speed controller keeps restoring ${formatRate(video.playbackRate)}. Disable Crunchyroll Speeder or other speed extensions, then refresh this tab.`);
+      showError(`Another speed controller keeps restoring ${formatRate(video.playbackRate)}. Disable ${hbo ? "other speed extensions" : "Crunchyroll Speeder or other speed extensions"}, then refresh this tab.`);
       return;
     }
     state.attempts += 1;
     state.lastAttempt = now;
     try {
       // Change the media itself, including rates missing from Crunchyroll's menu.
-      video.defaultPlaybackRate = selectedRate;
-      video.playbackRate = selectedRate;
+      if (!hbo) video.defaultPlaybackRate = selectedRate;
+      if (Math.abs(video.playbackRate - targetRate) >= 0.001) video.playbackRate = targetRate;
     } catch {
       showError("This player could not apply that playback speed.");
     }
@@ -105,13 +131,18 @@
   function render() {
     if (settingsContext.isActive?.() === false) return;
     if (!enabled) return;
-    const rate = displayedRate();
+    const media = primaryVideo();
+    const rate = displayedRate(media);
+    const easingSpeed = hbo && videoStates.get(media)?.bufferLimited && media.playbackRate === 1;
+    const buttonRate = formatRate(easingSpeed ? media.playbackRate : rate);
     for (const button of buttons) {
       if (!buttonAttributes.has(button)) {
         buttonAttributes.set(button, Object.fromEntries(["aria-haspopup", "aria-expanded", "aria-controls"]
           .map((name) => [name, button.getAttribute(name)])));
       }
-      if (button.textContent !== formatRate(rate)) button.textContent = formatRate(rate);
+      if (button.textContent !== buttonRate) button.textContent = buttonRate;
+      if (hbo) setAttribute(button, "title", easingSpeed
+        ? `Playing at 1x while buffering. Will resume at ${formatRate(rate)}.` : "Playback speed");
       setAttribute(button, "aria-haspopup", "dialog");
       setAttribute(button, "aria-expanded", String(activeButton === button && panel && !panel.hidden));
       setAttribute(button, "aria-controls", "youtube-hide-crunchyroll-speed");
@@ -119,7 +150,8 @@
     if (!panel) return;
     slider.value = String(normalizeRate(rate));
     setAttribute(slider, "aria-valuetext", `${Number(rate.toFixed(2))} times normal speed`);
-    if (output.textContent !== formatRate(rate)) output.textContent = formatRate(rate);
+    const speedText = easingSpeed ? `${formatRate(rate)} selected · 1x while buffering` : formatRate(rate);
+    if (output.textContent !== speedText) output.textContent = speedText;
     minus.disabled = rate <= MIN_RATE;
     plus.disabled = rate >= MAX_RATE;
     for (const preset of panel.querySelectorAll("[data-speed]")) {
@@ -148,6 +180,7 @@
     panelResizeObserver?.disconnect();
     if (!panel || panel.hidden) return;
     const opener = activeButton;
+    if (hbo && panel.hidePopover && panel.matches(":popover-open")) panel.hidePopover();
     panel.hidden = true;
     activeButton = null;
     render();
@@ -160,6 +193,7 @@
     if (!activeButton.isConnected) { closePanel(); return; }
     const host = document.fullscreenElement || document.body;
     if (panel.parentElement !== host) host.appendChild(panel);
+    if (hbo && panel.showPopover && !panel.matches(":popover-open")) panel.showPopover();
     const anchor = activeButton.getBoundingClientRect();
     const bounds = panel.getBoundingClientRect();
     const width = bounds.width || Math.min(390, window.innerWidth - 24);
@@ -186,6 +220,7 @@
     panel.id = "youtube-hide-crunchyroll-speed";
     panel.className = "youtube-hide-speed-panel";
     panel.hidden = true;
+    if (hbo && panel.showPopover) panel.setAttribute("popover", "manual");
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Playback speed");
     panel.innerHTML = `
@@ -261,17 +296,24 @@
       if (!button.isConnected) buttonAttributes.delete(button);
     }
     if (location.pathname !== lastPath) { lastPath = location.pathname; closePanel(); }
-    videos = allElements("video");
-    buttons = allElements(BUTTON_SELECTOR);
+    videos = hbo ? [hbo.video()].filter(Boolean) : allElements("video");
+    buttons = hbo ? [...document.querySelectorAll(BUTTON_SELECTOR)] : allElements(BUTTON_SELECTOR);
     for (const video of videos) {
       if (!videoStates.has(video)) {
-        const state = { attempts: 0, lastAttempt: 0, blocked: false };
+        const state = { attempts: 0, lastAttempt: 0, blocked: false, bufferLimited: false };
         videoStates.set(video, state);
-        for (const event of ["loadedmetadata", "play", "playing", "ratechange"]) {
+        const events = ["loadedmetadata", "play", "playing", "ratechange"];
+        if (hbo) events.push("timeupdate", "progress", "waiting", "seeked");
+        for (const event of events) {
           video.addEventListener(event, () => {
-            if (event !== "ratechange") { state.attempts = 0; state.blocked = false; }
+            const previousLimit = state.bufferLimited;
+            if (event === "loadedmetadata" || (!hbo && event !== "ratechange")) {
+              state.attempts = 0;
+              state.blocked = false;
+              state.bufferLimited = false;
+            }
             applyRate(video);
-            render();
+            if ((event !== "timeupdate" && event !== "progress") || previousLimit !== state.bufferLimited) render();
           });
         }
       }
@@ -291,7 +333,7 @@
   function init() {
     observer = new MutationObserver(scheduleScan);
     PlaybackPlusSettings.subscribe((settings) => {
-      const next = settings.extensionEnabled && settings.crunchyrollEnabled && settings.crunchyrollSpeedEnabled;
+      const next = settings.extensionEnabled && (hbo ? settings.hbomaxEnabled && settings.hbomaxSpeedEnabled : settings.crunchyrollEnabled && settings.crunchyrollSpeedEnabled);
       if (next === enabled) return;
       enabled = next;
       if (!enabled) {
@@ -312,7 +354,7 @@
       }
     });
     observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-    document.addEventListener("click", onClick, true);
+    if (!hbo) document.addEventListener("click", onClick, true);
     document.addEventListener("pointerdown", (event) => {
       if (panel && !panel.hidden && !event.composedPath().includes(panel) && !event.composedPath().includes(activeButton)) closePanel();
     }, true);
@@ -355,6 +397,8 @@
     scheduleScan();
   }
 
+  // Let the HBO Max speed button handle clicks before the player can consume them.
+  if (hbo) window.addEventListener("click", onClick, true);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();

@@ -1,0 +1,78 @@
+.playback-plus-hbo-no-dimming div:is([class*="TopGradient"], [class*="BottomGradient"]) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Keep click handling and loading feedback while clearing the dark background. */
+.playback-plus-hbo-no-dimming div[data-testid="protection_layer"],
+.playback-plus-hbo-no-dimming [data-testid="buffering"] div[class*="StyledProtection"] {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+#playback-plus-hbo-speed {
+  position: fixed;
+  inset: auto 24px 105px auto;
+  z-index: 2147483645;
+  pointer-events: auto;
+  padding: 8px 13px;
+  background: #222033e8;
+  color: #fff;
+  border: 1px solid #ffffff60;
+  border-radius: 999px;
+  font: 600 14px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.youtube-hide-speed-panel[popover] {
+  inset: auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  pointer-events: auto;
+}
+
+#playback-plus-hbo-speed.playback-plus-hbo-toolbar-speed {
+  position: static;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  align-self: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 75%);
+  font: 600 14px/1 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  translate: 0 var(--playback-plus-speed-offset, 0px);
+}
+
+#playback-plus-hbo-speed.playback-plus-hbo-toolbar-speed:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  color: #fff;
+}
+
+.playback-plus-hbo-seek {
+  pointer-events: none;
+}
+
+svg:has(> .playback-plus-hbo-seek) > :not(.playback-plus-hbo-seek) {
+  visibility: hidden;
+}
+
+.playback-plus-hbo-notice {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2147483646;
+  border-radius: 8px;
+  background: #14131ce8;
+  color: white;
+  padding: 12px 20px;
+  font: 600 18px/1.4 system-ui, sans-serif;
+  pointer-events: none;
+}

@@ -28,6 +28,7 @@
       <div class="site-tabs" role="tablist" aria-label="Site settings">
         <button id="youtube-tab" type="button" role="tab" aria-selected="true" aria-controls="youtube-panel" data-site="youtube"><span class="site-symbol youtube-symbol" aria-hidden="true">▶</span>YouTube</button>
         <button id="crunchyroll-tab" type="button" role="tab" aria-selected="false" aria-controls="crunchyroll-panel" tabindex="-1" data-site="crunchyroll"><span class="site-symbol crunchyroll-symbol" aria-hidden="true">C</span>Crunchyroll</button>
+        <button id="hbomax-tab" type="button" role="tab" aria-selected="false" aria-controls="hbomax-panel" tabindex="-1" data-site="hbomax">HBO Max</button>
       </div>
 
       <section id="youtube-panel" class="site-panel" role="tabpanel" aria-labelledby="youtube-tab">
@@ -63,8 +64,20 @@
         <details id="diagnostics" hidden><summary>Player status</summary><p id="crunchyroll-status" class="diagnostic-copy"></p><button id="check-status" class="text-button" type="button">Check again</button></details>
       </section>
 
+      <section id="hbomax-panel" class="site-panel" role="tabpanel" aria-labelledby="hbomax-tab" hidden>
+        <label class="toggle site-enable"><span><strong>Enable HBO Max tools</strong></span><input data-setting="hbomaxEnabled" type="checkbox" role="switch" disabled /><span class="switch" aria-hidden="true"></span></label>
+        <fieldset id="hbomax-options" class="settings-group" disabled>
+          <legend>Player</legend>
+          <label class="toggle"><span>In-player speed picker</span><input data-setting="hbomaxSpeedEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact"><span>Remove video dimming</span><input data-setting="hbomaxRemoveDimmingEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact" title="Rewind/forward buttons and left/right arrows use 5 seconds"><span>5-second rewind/forward</span><input data-setting="hbomaxFiveSecondSeekEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle compact" title="J: back 10s. K: pause/play. L: forward 10s."><span>Enable J/K/L shortcuts</span><input data-setting="hbomaxKeyboardShortcutsEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+          <label class="toggle"><span>Auto “Skip Intro”</span><input data-setting="hbomaxAutoSkipEnabled" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
+        </fieldset>
+      </section>
+
       <fieldset id="general-options" class="general-options" disabled>
-        <legend>Both sites</legend>
+        <legend>All sites</legend>
         <label class="toggle"><span><strong>Show “Jumped ahead” notice</strong></span><input data-setting="showSkipNotice" type="checkbox" role="switch" /><span class="switch" aria-hidden="true"></span></label>
       </fieldset>
       <footer><button id="reset-settings" class="text-button" type="button" disabled>Reset settings</button><span id="save-status" role="status" aria-live="polite">Loading settings…</span><span id="version" class="version"></span></footer>

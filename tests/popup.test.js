@@ -152,7 +152,7 @@ test("unsupported and lookalike domains retain settings access without showing p
   const page = setup(t, { url: "https://youtube.com.example.org/watch" });
   assert.equal(page.element("refresh-tab").hidden, true);
   assert.equal(page.element("diagnostics").hidden, true);
-  assert.equal(page.element("site-status").textContent, "YouTube + Crunchyroll");
+  assert.equal(page.element("site-status").textContent, "YouTube, Crunchyroll & HBO Max");
   page.input("showSkipNotice").click();
   assert.equal(page.values.sync.showSkipNotice, false);
 });

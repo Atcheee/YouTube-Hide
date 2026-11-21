@@ -211,7 +211,10 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector: "#movie_player" });
     await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["hover"] });
     assert.equal(await page.locator("#movie_player").evaluate((player) => player.matches(":hover")), true);
-    await page.evaluate(() => { hoverFixture.offerJump = true; });
+    await page.evaluate(() => {
+      const start = document.querySelector("video").currentTime;
+      hoverFixture.segments = [{ start, end: start + 3 }, { start: start + 5, end: start + 9 }];
+    });
     await page.waitForFunction(() => hoverFixture.jumps === 1);
     assert.equal(await page.locator(".ytp-chrome-bottom").evaluate((bar) => getComputedStyle(bar).opacity), "0");
     assert.equal(await page.locator(".ytp-tooltip").evaluate((tooltip) => getComputedStyle(tooltip).display), "none");
@@ -222,15 +225,33 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     console.log(JSON.stringify({ stationaryLayoutEvents: layoutEvents, nativeHides: await page.evaluate(() => hoverFixture.nativeHides) }));
     await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] });
     await session.detach();
-    // Skip memory stops future probes, so manual restoration must also work here.
+    // Real input must still restore the controls after automatic jumps.
     await page.mouse.move(500, 200);
     assert.equal(await page.evaluate(() => hoverFixture.controlsDisabled), false);
     assert.equal(await page.locator(".ytp-chrome-bottom").evaluate((bar) => getComputedStyle(bar).display), "block");
     await page.locator(".ytp-progress-bar").hover();
     assert.notEqual(await page.locator(".ytp-tooltip").evaluate((tooltip) => getComputedStyle(tooltip).display), "none");
-    await page.evaluate(() => { document.querySelector("video").currentTime = 0; });
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    // Put the player back inside the first segment and let its native hover
+    // expose the prompt again. It must remain available for a manual click.
+    await page.evaluate(async () => {
+      const video = document.querySelector("video");
+      video.pause();
+      await new Promise(resolve => {
+        video.addEventListener("seeked", resolve, { once: true });
+        video.currentTime = hoverFixture.segments[0].start + 0.1;
+      });
+    });
+    await page.locator(".ytp-progress-bar").hover({ position: { x: 5, y: 3 } });
+    await page.locator(".ytp-timely-actions-overlay button").waitFor({ state: "attached" });
     assert.equal(await page.evaluate(() => hoverFixture.jumps), 1);
+    await page.evaluate(async () => {
+      document.querySelector(".ytp-timely-actions-overlay").remove();
+      const video = document.querySelector("video");
+      video.currentTime = hoverFixture.segments[1].start;
+      await video.play();
+      window.dispatchEvent(new Event("blur"));
+    });
+    await page.waitForFunction(() => hoverFixture.jumps === 2);
 
     // Model YouTube's fullscreen classes and viewport geometry, with simulated
     // application blur but a visible tab. This avoids native fullscreen/focus
@@ -281,7 +302,7 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     assert.equal(await page.locator('.ytp-fullscreen-metadata').evaluate(element => getComputedStyle(element).opacity), '1');
     assert.equal(await page.locator('.ytp-chrome-bottom').evaluate(element => getComputedStyle(element).opacity), '1');
     console.log(JSON.stringify({ fullscreen, fullscreenLayoutSimulated: true, applicationFocusSimulated: true }));
-    console.log("Passed: stationary captions, cursor and watermark across automatic checks, custom caption positions/cue updates, manual UI, automatic skip, rewind protection.");
+    console.log("Passed: stationary captions, cursor and watermark across automatic checks, custom caption positions/cue updates, manual UI, successive automatic jumps, rewind protection.");
   } finally {
     await context.close();
   }

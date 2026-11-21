@@ -113,13 +113,14 @@
   timeline.addEventListener('mousemove', () => {
     hoverFixture.hovers += 1;
     player.dataset.nativeHover = 'true';
-    if (hoverFixture.offerJump && !player.querySelector('.ytp-timely-actions-overlay')) {
+    const segment = hoverFixture.segments?.find(({ start, end }) => video.currentTime >= start && video.currentTime < end);
+    if ((segment || (hoverFixture.offerJump && !hoverFixture.segments)) && !player.querySelector('.ytp-timely-actions-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'ytp-timely-actions-overlay';
       overlay.innerHTML = '<button>Jump ahead<div class="ytSpecTouchFeedbackShapeFill"></div></button>';
       overlay.querySelector('button').addEventListener('click', () => {
         hoverFixture.jumps += 1;
-        video.currentTime += 1;
+        video.currentTime = segment?.end ?? video.currentTime + 1;
         overlay.remove();
       });
       player.appendChild(overlay);

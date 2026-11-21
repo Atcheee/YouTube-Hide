@@ -109,6 +109,60 @@ test("each new video gets one click; playlist changes and returning to old video
   assert.equal(page.clicks, 2);
 });
 
+test("skips successive segments in one video while leaving rewinds and stale prompts alone", async (t) => {
+  const page = setup(t);
+  const video = page.player.querySelector("video");
+  video.currentTime = 12;
+  page.button.addEventListener("click", () => { video.currentTime = 25; }, { once: true });
+  await page.flush();
+  assert.equal(page.clicks, 1);
+
+  // A stale button can still be visible after the playhead advances.
+  video.currentTime = 29;
+  page.event("timeupdate", video);
+  await page.flush();
+  assert.equal(page.clicks, 1);
+
+  const prompt = page.button.parentElement.closest(".ytp-timely-actions-overlay");
+  prompt.hidden = true;
+  await page.flush();
+  video.currentTime = 42;
+  page.button.addEventListener("click", () => { video.currentTime = 61; }, { once: true });
+  prompt.hidden = false;
+  await page.flush();
+  assert.equal(page.clicks, 2, "a later segment may reuse the native button");
+  assert.equal(video.currentTime, 61);
+
+  page.player.querySelector(".ytp-timely-actions-overlay").remove();
+  page.player.insertAdjacentHTML("beforeend", overlay);
+  for (const position of [9, 23, 41, 58]) {
+    video.currentTime = position;
+    page.event("seeked", video);
+    await page.flush();
+    assert.equal(page.clicks, 2, "rewinding into either skipped segment stays manual");
+  }
+});
+
+test("a manual Jump ahead with an asynchronous landing protects only earlier playback", async (t) => {
+  const page = setup(t);
+  const video = page.player.querySelector("video");
+  video.currentTime = 12;
+  page.button.click();
+  video.currentTime = 30;
+  page.event("seeking", video);
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  page.player.querySelector(".ytp-timely-actions-overlay").remove();
+  video.currentTime = 25;
+  page.player.insertAdjacentHTML("beforeend", overlay);
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  video.currentTime = 50;
+  page.event("timeupdate", video);
+  await page.flush();
+  assert.equal(page.clicks, 2);
+});
+
 test("does not click stale controls during navigation", async (t) => {
   const page = setup(t);
   page.event("yt-navigate-start");

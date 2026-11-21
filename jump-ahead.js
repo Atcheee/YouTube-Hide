@@ -12,7 +12,12 @@
   const USER_IDLE_MS = 3000;
   const PROBE_CLASS = "youtube-hide-timeline-probe";
   const QUIET_CLASS = "youtube-hide-auto-activity";
-  const skippedVideos = new Set();
+  const SEEK_CONFIRM_MS = 1500;
+  const JUMP_MARGIN_SECONDS = 0.25;
+  const protectedThrough = new Map();
+  let pendingJump = null;
+  let lastPrompt = null;
+  let clickingPrompt = null;
   let scanQueued = false;
   let lastPlayerActivity = -Infinity;
   let navigating = false;
@@ -269,43 +274,74 @@
     }));
   }
 
+  function recordJump(videoId, player, button) {
+    const video = player.querySelector("video");
+    const from = video?.currentTime ?? 0;
+    protectedThrough.set(videoId, Math.max(protectedThrough.get(videoId) ?? -Infinity, from));
+    lastPrompt = button;
+    pendingJump = { videoId, video, from, until: Date.now() + SEEK_CONFIRM_MS };
+  }
+
+  function confirmJump(video) {
+    const jump = pendingJump;
+    if (!jump || jump.video !== video || !video ||
+        jump.videoId !== currentVideoId() || Date.now() > jump.until) return;
+    if (video.currentTime <= jump.from + JUMP_MARGIN_SECONDS) return;
+    protectedThrough.set(jump.videoId, Math.max(protectedThrough.get(jump.videoId), video.currentTime));
+    pendingJump = null;
+  }
+
   function tryJumpAhead() {
     if (settingsContext.isActive?.() === false) return;
     scanQueued = false;
     const videoId = currentVideoId();
-    if (!enabled || navigating || !videoId || skippedVideos.has(videoId)) return;
+    if (!enabled || navigating || !videoId) return;
 
     const player = document.getElementById("movie_player");
     if (!player) return;
     watchPlayerSize(player);
+    if (lastPrompt && !isAvailable(lastPrompt)) lastPrompt = null;
     if (hasInteractiveUi(player)) {
       endTimelineProbe();
       restoreUserPreviews();
       restoreUserControls();
       return;
     }
+    const video = player.querySelector("video");
+    const position = video?.currentTime ?? 0;
+    // A prompt does not expose its start time. Protect everything up to the
+    // last landing so rewinding to before the original click stays manual.
+    if (video?.seeking || position <= (protectedThrough.get(videoId) ?? -Infinity) + JUMP_MARGIN_SECONDS ||
+        (pendingJump?.videoId === videoId && pendingJump.video === video && Date.now() <= pendingJump.until)) return;
 
     let button = availableJumpButton(player);
     if (!button) {
       revealPlayerActions(player);
       button = availableJumpButton(player);
     }
-    if (!enabled || !button || navigating || currentVideoId() !== videoId || skippedVideos.has(videoId)) {
+    if (!enabled || !button || button === lastPrompt || navigating || currentVideoId() !== videoId) {
       if (!timelineProbe) endPlayerActivity();
       return;
     }
 
-    // Record before clicking: click handlers can synchronously change the DOM.
-    // Keep video IDs across seeks, button replacements and SPA back navigation.
-    skippedVideos.add(videoId);
-    try { button.click(); } finally { endTimelineProbe(); endPlayerActivity(); }
+    // Record before clicking because YouTube can synchronously change the DOM.
+    recordJump(videoId, player, button);
+    clickingPrompt = button;
+    try {
+      button.click();
+      confirmJump(video);
+    } finally {
+      clickingPrompt = null;
+      endTimelineProbe();
+      endPlayerActivity();
+    }
     if (!navigating && currentVideoId() === videoId) showJumpNotice(player);
   }
 
   function scheduleScan() {
     if (settingsContext.isActive?.() === false) return;
     const videoId = currentVideoId();
-    if (!enabled || navigating || !videoId || skippedVideos.has(videoId) || scanQueued) return;
+    if (!enabled || navigating || !videoId || scanQueued) return;
     // Animation frames may stop in background tabs. Microtasks still run when
     // playback events, DOM mutations or our fallback timer wake the page.
     scanQueued = true;
@@ -335,6 +371,8 @@
 
     document.addEventListener("yt-navigate-start", () => {
       navigating = true;
+      pendingJump = null;
+      lastPrompt = null;
       nextReveal = "timeline";
       pointerPlayer = null;
       pointerPressed = false;
@@ -376,6 +414,9 @@
       document.addEventListener(event, (input) => {
         if (!input.isTrusted) return;
         const targetPlayer = input.target instanceof Element ? input.target.closest("#movie_player") : null;
+        if ((targetPlayer && (input.type === "pointerdown" || input.type === "mousedown")) || input.type === "keydown") {
+          pendingJump = null;
+        }
         if (input.type === "keydown") lastKeyboardActivity = Date.now();
         else {
           pointerPlayer = targetPlayer;
@@ -419,14 +460,22 @@
       }, true);
     }
     // Also catch visibility changes caused by playback or CSS transitions.
-    for (const event of ["timeupdate", "seeked", "playing", "transitionend", "animationend"]) {
+    for (const event of ["timeupdate", "playing", "transitionend", "animationend"]) {
       document.addEventListener(event, scheduleScan, true);
+    }
+    for (const event of ["seeking", "seeked"]) {
+      document.addEventListener(event, input => {
+        confirmJump(input.target);
+        scheduleScan();
+      }, true);
     }
     // A manual skip also means a later rewind should be left alone.
     document.addEventListener("click", (event) => {
       const button = event.target instanceof Element ? event.target.closest(BUTTON_SELECTOR) : null;
       const videoId = currentVideoId();
-      if (!navigating && videoId && isJumpAheadButton(button)) skippedVideos.add(videoId);
+      if (!navigating && videoId && button !== clickingPrompt && isJumpAheadButton(button)) {
+        recordJump(videoId, button.closest("#movie_player"), button);
+      }
     }, true);
     scheduleScan();
   }

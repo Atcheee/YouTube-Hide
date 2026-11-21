@@ -44,7 +44,7 @@ guide displays Watch later as its own full-width row without wrapping its label.
 Toggle **Watch later in sidebar** in the popup to restore Watch later to the You
 menu independently of Shorts filtering. Both preferences apply to open tabs.
 
-Also automatically clicks the player's visible **Jump ahead** button once per video.
+Also automatically clicks the player's visible **Jump ahead** button for successive segments.
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
 Playback events and a one-second fallback check work without animation frames or tab
@@ -73,8 +73,8 @@ another monitor cannot keep controls awake. Artificial hover also closes on wind
 and visible menus and keyboard-focused player controls remain protected past the idle
 timeout. Resizing, theater-mode layout changes and fullscreen transitions cancel stale
 timeline probes before new checks use the updated player geometry.
-Focus and tab visibility changes also end artificial hover. Simulated movement stops
-once that video has been skipped. The extension never clicks/drags the timeline or changes
+Focus and tab visibility changes also end artificial hover. Checks pause before the last
+jump's landing point and resume as playback moves beyond it. The extension never clicks/drags the timeline or changes
 playback time itself.
 YouTube must accept the simulated event and expose the button; browser-frozen or
 discarded tabs cannot run the content script, and background timers may be delayed.
@@ -133,10 +133,9 @@ discarded tabs cannot run the content script, and background timers may be delay
 
 - Runs on every `youtube.com` page.
 - Handles YouTube's single-page navigation and dynamically loaded video lists.
-- Auto-clicks **Jump ahead** once per video during the current page session. Rewinding,
-  replaying, or returning to the same video through YouTube navigation does not trigger
-  another click. A different video gets its own click; refreshing the tab resets this memory.
-- A manual **Jump ahead** click also prevents a later automatic click on that video.
+- Auto-clicks **Jump ahead** for later segments in the same video. After an automatic or
+  manual jump, earlier playback remains under your control. This memory follows each
+  video through YouTube navigation and resets when you refresh the tab.
 - After an automatic skip, a centered **Jumped ahead** notice appears over the video
   for two seconds. It does not block player controls or appear for manual skips.
 - Covers home feeds, search results, channel grids, playlists, and watch-page recommendations.
@@ -174,7 +173,7 @@ discarded tabs cannot run the content script, and background timers may be delay
 - `icons/`: Amber fast-forward icon for the toolbar, extension manager, and popup.
   Run `npm run build:icons` to regenerate PNG sizes from the SVG source.
 - `content.js`: Video-card and Shorts-section detection, SPA navigation handling, and dynamic-content observer.
-- `jump-ahead.js`: One-time-per-video auto-clicking for the player's Jump ahead button.
+- `jump-ahead.js`: Auto-clicking for successive Jump ahead segments with rewind protection.
 - `youtube-sidebar.js`: Sidebar Shorts filtering and the Watch later shortcut.
 - `styles.css`: Hides matched cards and sections.
 - `crunchyroll-skip-intro.js` / `crunchyroll.css`: Crunchyroll intro skipping and notice.

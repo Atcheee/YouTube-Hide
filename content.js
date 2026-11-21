@@ -12,6 +12,15 @@
   const DURATION_BADGE_PATTERN = /^\d{1,2}:\d{2}(?::\d{2})?$/;
   // Music-note glyph used on music-video thumbnail duration badges.
   const MUSIC_NOTE_PATH_PATTERN = /M5\.5 1\.383|a2\.25 2\.25 0 101 1\.871/;
+  const TIME_OVERLAY_SELECTOR = "ytd-thumbnail-overlay-time-status-renderer";
+  const MUSIC_THUMBNAIL_SELECTOR = [
+    "yt-thumbnail-view-model",
+    "yt-thumbnail-badge-view-model",
+    ".ytThumbnailBottomOverlayViewModelBadge",
+    "ytd-thumbnail",
+    TIME_OVERLAY_SELECTOR,
+    "a.ytLockupViewModelContentImage"
+  ].join(",");
   const CARD_SELECTOR = [
     "ytd-rich-item-renderer",
     "ytd-video-renderer",
@@ -158,14 +167,12 @@
 
   function isMusicVideoCard(card) {
     // Classic cards: thumbnail time overlay marked as music.
-    if (card.querySelector('ytd-thumbnail-overlay-time-status-renderer[overlay-style="MUSIC"]')) {
+    if (card.querySelector(`${TIME_OVERLAY_SELECTOR}[overlay-style="MUSIC"]`)) {
       return true;
     }
 
     // Lockup cards: music-note SVG on the thumbnail duration badge.
-    const thumbnailRoots = card.querySelectorAll(
-      "yt-thumbnail-view-model, yt-thumbnail-badge-view-model, .ytThumbnailBottomOverlayViewModelBadge, ytd-thumbnail, ytd-thumbnail-overlay-time-status-renderer, a.ytLockupViewModelContentImage"
-    );
+    const thumbnailRoots = card.querySelectorAll(MUSIC_THUMBNAIL_SELECTOR);
     for (const root of thumbnailRoots) {
       const paths = root.querySelectorAll("path");
       if (
@@ -281,6 +288,16 @@
     mutations.forEach((mutation) => {
       const targetElement =
         mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+      if (mutation.type === "attributes") {
+        // YouTube can add or replace a music badge on an existing card in place.
+        if (!shouldHideMusic()) return;
+        const isMusicBadgeChange = mutation.attributeName === "overlay-style"
+          ? targetElement.matches(TIME_OVERLAY_SELECTOR)
+          : targetElement.matches("path") && targetElement.closest(MUSIC_THUMBNAIL_SELECTOR);
+        if (isMusicBadgeChange) scheduleCard(outermostVideoCard(targetElement));
+        return;
+      }
+
       scheduleCard(outermostVideoCard(targetElement));
       scheduleSection(outermostSection(targetElement));
 
@@ -337,7 +354,9 @@
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["d", "overlay-style"]
     });
 
     document.addEventListener("yt-navigate-finish", handleNavigation);

@@ -48,11 +48,10 @@ Also automatically clicks the player's visible **Jump ahead** button for success
 The `ytSpecTouchFeedbackShapeFill` class alone is not enough: the enclosing button
 must say "Jump ahead" and be inside the video player's timely-actions overlay.
 Playback events and a one-second fallback check work without animation frames or tab
-focus. During playback, the extension sends simulated movement to the video surface
-or brief timeline hover checks (one strategy per check) to reveal Jump ahead, without moving your cursor or
-switching tabs. Timeline checks target the current playback position, suppress thumbnail
-previews, and send matching leave events after a skip or a 250 ms check window. Preview
-suppression remains while unattended. Genuine player input ends artificial timeline hover
+focus. During playback, the extension simulates hover on the timeline or video surface
+without moving your cursor or switching tabs. Timeline checks target the current playback
+position. Each hover can last up to 750 ms so delayed prompts have time to appear.
+Thumbnail previews stay hidden while unattended. Genuine player input ends artificial hover
 and releases every mask so manual tooltips and controls remain available. Unattended checks also suppress native control bars
 and gradients, including the fullscreen Like/Dislike/Comments/Share row, so they do not blink.
 Checks close both timeline and full player hover when unattended. They never call native

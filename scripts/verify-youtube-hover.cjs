@@ -213,6 +213,7 @@ async function sampleUnattendedFrames(page, simulateBlur = true) {
     assert.equal(await page.locator("#movie_player").evaluate((player) => player.matches(":hover")), true);
     await page.evaluate(() => {
       const start = document.querySelector("video").currentTime;
+      hoverFixture.jumpDelay = 450;
       hoverFixture.segments = [{ start, end: start + 3 }, { start: start + 5, end: start + 9 }];
     });
     await page.waitForFunction(() => hoverFixture.jumps === 1);

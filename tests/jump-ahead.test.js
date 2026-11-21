@@ -451,7 +451,7 @@ test("an unsuccessful timeline check sends leave events and keeps delayed previe
   let expireProbe;
   const setTimeout = page.window.setTimeout.bind(page.window);
   t.mock.method(page.window, "setTimeout", (callback, delay) => {
-    if (delay === 250) { expireProbe = callback; return -1; }
+    if (delay === 750) { expireProbe = callback; return -1; }
     return setTimeout(callback, delay);
   });
   let hovered = false;
@@ -465,6 +465,27 @@ test("an unsuccessful timeline check sends leave events and keeps delayed previe
   assert.equal(page.clicks, 0);
   page.event("yt-navigate-start");
   assert.equal(page.player.classList.contains("youtube-hide-timeline-probe"), false);
+});
+
+test("a video-surface check stays active for a prompt offered on a later task", async (t) => {
+  const page = setup(t, "");
+  const video = setPlaying(page);
+  let hovering = false;
+  page.player.addEventListener("mouseleave", () => { hovering = false; });
+  const response = new Promise((resolve) => {
+    video.addEventListener("mousemove", () => {
+      hovering = true;
+      setImmediate(() => {
+        if (hovering) page.player.insertAdjacentHTML("beforeend", overlay);
+        resolve();
+      });
+    }, { once: true });
+  });
+  await response;
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  assert.equal(hovering, false);
+  assert.equal(page.player.classList.contains("youtube-hide-auto-activity"), true);
 });
 
 test("genuine user input restores normal previews and hands control back without a fake leave", async (t) => {

@@ -66,7 +66,7 @@
   const metadata = player.querySelector('.ytp-fullscreen-metadata');
   const quickActions = player.querySelector('.ytp-fullscreen-quick-actions');
   const grid = player.querySelector('.ytp-fullscreen-grid');
-  window.hoverFixture = { checks: 0, hovers: 0, leaves: 0, playerLeaves: 0, nativeHides: 0, nativeShows: 0, controlsDisabled: false, actions: 0, jumps: 0, offerJump: false, seeks: 0 };
+  window.hoverFixture = { checks: 0, hovers: 0, leaves: 0, playerLeaves: 0, nativeHides: 0, nativeShows: 0, controlsDisabled: false, actions: 0, jumps: 0, offerJump: false, jumpDelay: 0, seeks: 0 };
   player.hideControls = () => {
     hoverFixture.nativeHides += 1;
     hoverFixture.controlsDisabled = true;
@@ -109,12 +109,19 @@
     grid.style.opacity = '0';
   });
   quickActions.addEventListener('click', () => { hoverFixture.actions += 1; });
+  let jumpPromptTimer;
   timeline.addEventListener('mouseenter', () => { player.dataset.nativeHover = 'true'; });
   timeline.addEventListener('mousemove', () => {
     hoverFixture.hovers += 1;
     player.dataset.nativeHover = 'true';
     const segment = hoverFixture.segments?.find(({ start, end }) => video.currentTime >= start && video.currentTime < end);
-    if ((segment || (hoverFixture.offerJump && !hoverFixture.segments)) && !player.querySelector('.ytp-timely-actions-overlay')) {
+    if (segment || (hoverFixture.offerJump && !hoverFixture.segments)) {
+      clearTimeout(jumpPromptTimer);
+      jumpPromptTimer = setTimeout(() => offerJump(segment), hoverFixture.jumpDelay);
+    }
+  });
+  function offerJump(segment) {
+    if (!player.querySelector('.ytp-timely-actions-overlay')) {
       const overlay = document.createElement('div');
       overlay.className = 'ytp-timely-actions-overlay';
       overlay.innerHTML = '<button>Jump ahead<div class="ytSpecTouchFeedbackShapeFill"></div></button>';
@@ -125,8 +132,9 @@
       });
       player.appendChild(overlay);
     }
-  });
+  }
   timeline.addEventListener('mouseleave', () => {
+    clearTimeout(jumpPromptTimer);
     hoverFixture.leaves += 1;
     player.dataset.nativeHover = 'false';
   });

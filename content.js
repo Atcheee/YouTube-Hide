@@ -5,6 +5,7 @@
   if (settingsContext.install && !settingsContext.install("content")) return;
 
   const HIDDEN_CLASS = "hide-streamed-days-video";
+  const HIDDEN_SECTION_ATTR = "data-playback-plus-hidden-shorts-section";
   // Matches metadata like "Streamed 1 hour ago", "Streamed 3 days ago", etc.
   const STREAMED_AGO_PATTERN =
     /\bStreamed\s+\d[\d,.]*\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b/i;
@@ -21,6 +22,11 @@
     TIME_OVERLAY_SELECTOR,
     "a.ytLockupViewModelContentImage"
   ].join(",");
+  const SHORTS_LOCKUP_SELECTOR = [
+    "ytd-shorts-lockup-view-model",
+    "ytm-shorts-lockup-view-model",
+    "ytm-shorts-lockup-view-model-v2"
+  ].join(",");
   const CARD_SELECTOR = [
     "ytd-rich-item-renderer",
     "ytd-video-renderer",
@@ -32,8 +38,7 @@
     "ytm-video-with-context-renderer",
     "ytm-compact-video-renderer",
     "ytd-reel-item-renderer",
-    "ytd-shorts-lockup-view-model",
-    "ytm-shorts-lockup-view-model"
+    SHORTS_LOCKUP_SELECTOR
   ].join(",");
   const SECTION_SELECTOR = [
     "ytd-rich-section-renderer",
@@ -126,15 +131,8 @@
   }
 
   function isShortsCard(card) {
-    if (
-      card.matches(
-        "ytd-reel-item-renderer, ytd-shorts-lockup-view-model, ytm-shorts-lockup-view-model"
-      )
-    ) {
-      return true;
-    }
-
-    if (card.querySelector("ytd-shorts-lockup-view-model, ytm-shorts-lockup-view-model")) {
+    if (card.matches(`ytd-reel-item-renderer, ${SHORTS_LOCKUP_SELECTOR}`) ||
+        card.querySelector(SHORTS_LOCKUP_SELECTOR)) {
       return true;
     }
 
@@ -202,8 +200,7 @@
 
   function isShortsSection(section) {
     if (section.matches("ytd-reel-shelf-renderer")) return true;
-    if (section.querySelector("ytd-rich-shelf-renderer[is-shorts], [is-shorts]")) return true;
-    if (section.querySelector("ytd-reel-shelf-renderer, ytd-shorts-lockup-view-model, ytm-shorts-lockup-view-model")) {
+    if (section.querySelector(`[is-shorts], ytd-reel-shelf-renderer, ${SHORTS_LOCKUP_SELECTOR}`)) {
       return true;
     }
     if (/^shorts$/i.test(sectionTitleText(section))) return true;
@@ -226,12 +223,15 @@
 
   function updateSection(section) {
     if (!section.isConnected) return;
-    section.classList.toggle(HIDDEN_CLASS, shouldHideShorts() && isShortsSection(section));
+    // YouTube can rewrite the outer renderer's classes when updating a shelf.
+    section.toggleAttribute(HIDDEN_SECTION_ATTR, shouldHideShorts() && isShortsSection(section));
+    section.classList.remove(HIDDEN_CLASS); // Clear markers left by older versions in open tabs.
   }
 
   function clearHiddenElements() {
-    document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((element) => {
+    document.querySelectorAll(`.${HIDDEN_CLASS}, [${HIDDEN_SECTION_ATTR}]`).forEach((element) => {
       element.classList.remove(HIDDEN_CLASS);
+      element.removeAttribute(HIDDEN_SECTION_ATTR);
     });
   }
 
@@ -289,6 +289,10 @@
       const targetElement =
         mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
       if (mutation.type === "attributes") {
+        if (mutation.attributeName === "is-shorts") {
+          if (shouldHideShorts()) scheduleSection(outermostSection(targetElement));
+          return;
+        }
         // YouTube can add or replace a music badge on an existing card in place.
         if (!shouldHideMusic()) return;
         const isMusicBadgeChange = mutation.attributeName === "overlay-style"
@@ -356,7 +360,7 @@
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["d", "overlay-style"]
+      attributeFilter: ["d", "overlay-style", "is-shorts"]
     });
 
     document.addEventListener("yt-navigate-finish", handleNavigation);

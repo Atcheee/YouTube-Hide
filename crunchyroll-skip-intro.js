@@ -207,6 +207,13 @@
           diagnosticState = "Player changed; waiting to retry";
           return;
         }
+        if (!target.dispatchEvent(new CustomEvent("playback-plus-before-intro-skip", {
+          bubbles: true, cancelable: true, composed: true
+        }))) {
+          completeClaim(response, "release");
+          diagnosticState = "Waiting for the previous seek to finish";
+          return;
+        }
         autoClicking = true;
         try { button.click(); } finally { autoClicking = false; }
         completeClaim(response, "commit");

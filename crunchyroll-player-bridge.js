@@ -8,6 +8,9 @@
   const handlers = new Map();
   let positionState = null;
   let pendingPositions = new WeakMap();
+  const seekRequests = new WeakMap();
+  const introSkips = new WeakMap();
+  const SEEK_TIMEOUT = 2000;
   const handledKeys = new Set();
   // Register at document_start, before the site's window-capture shortcuts.
   // The isolated script decides settings/focus and calls the native engine.
@@ -63,24 +66,68 @@
     }
   }
 
-  function absoluteSeek(video, control, sign, seconds, route) {
+  function trackTransition(transitions, video, position) {
+    transitions.set(video, { position, time: Date.now(), source: video.currentSrc, page: location.href });
+  }
+
+  function currentTransition(transitions, video) {
+    const transition = transitions.get(video);
+    if (transition && transition.source === video.currentSrc && transition.page === location.href) return transition;
+    transitions.delete(video);
+    return null;
+  }
+
+  document.addEventListener("seeked", ({ target: video }) => {
+    const request = currentTransition(seekRequests, video);
+    if (request && (request.position === undefined || Math.abs(video.currentTime - request.position) <= 1)) {
+      seekRequests.delete(video);
+    }
+    const intro = currentTransition(introSkips, video);
+    if (intro && !intro.landed) {
+      intro.landed = true;
+      intro.time = Date.now();
+    }
+  }, true);
+
+  document.addEventListener("playback-plus-before-intro-skip", event => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement) || !video.isConnected) return;
+    const request = currentTransition(seekRequests, video);
+    // The engine may have queued a seek before the media sets seeking=true.
+    if (request && Date.now() - request.time < SEEK_TIMEOUT) {
+      event.preventDefault();
+      return;
+    }
+    pendingPositions.delete(video);
+    trackTransition(introSkips, video);
+  }, true);
+
+  function absoluteSeek(video, control, sign, seconds, route, intro) {
     const now = Date.now();
     const pending = pendingPositions.get(video);
     const sameSource = pending && pending.source === video.currentSrc && pending.page === location.href && pending.duration === control.duration && pending.route === route;
     // Buffering can leave the UI clock behind the requested position. Accumulate
-    // rapid presses until acknowledgement, without reading/writing media time.
-    const base = sameSource && now - pending.time < 2000 && Math.abs(control.current - pending.position) > 1
-      ? pending.position : control.current;
+    // rapid presses until acknowledgement. After an intro skip, the native
+    // control may still report the pre-skip position even after media has landed.
+    const current = intro?.landed && Math.abs(control.current - video.currentTime) > 1
+      ? video.currentTime : control.current;
+    const base = sameSource && now - pending.time < SEEK_TIMEOUT && Math.abs(current - pending.position) > 1
+      ? pending.position : current;
     const position = Math.max(0, Math.min(control.duration, base + sign * seconds));
+    trackTransition(seekRequests, video, position);
     control.seek(position);
     pendingPositions.set(video, { position, route, time: now, source: video.currentSrc,
       page: location.href, duration: control.duration });
   }
 
   for (const event of ["pointerdown", "loadedmetadata", "emptied"]) {
-    document.addEventListener(event, () => {
+    document.addEventListener(event, ({ target }) => {
       pendingPositions = new WeakMap();
-      if (event !== "pointerdown") positionState = null;
+      if (event !== "pointerdown") {
+        positionState = null;
+        seekRequests.delete(target);
+        introSkips.delete(target);
+      }
     }, true);
   }
   window.addEventListener("popstate", () => { pendingPositions = new WeakMap(); positionState = null; });
@@ -129,18 +176,33 @@
           !button.disabled && button.getAttribute("aria-disabled") !== "true");
         if (button) { button.click(); event.preventDefault(); }
       } else {
+        let intro = currentTransition(introSkips, video);
+        const recentIntro = intro && Date.now() - intro.time < SEEK_TIMEOUT;
+        if (intro && !intro.landed && (video.seeking || recentIntro)) {
+          event.preventDefault();
+          return;
+        }
+        if (intro && !recentIntro) {
+          introSkips.delete(video);
+          intro = null;
+        }
         // A popup may attach after media-session registration. Use the timeline's
-        // own seek callback and displayed time, not HTMLMediaElement.currentTime.
+        // own seek callback and displayed time.
         const sign = command.action === "seekbackward" ? -1 : 1;
         const control = timeline(video);
         if (nativeAbsolute) {
           const handler = handlers.get("seekto");
-          absoluteSeek(video, { ...positionState, seek: position => handler({ action: "seekto", seekTime: position }) }, sign, command.seconds, handler);
-        } else if (control) absoluteSeek(video, control, sign, command.seconds, control.route);
-        else if (nativeSeek) handlers.get(command.action)({ action: command.action, seekOffset: command.seconds });
-        else return;
+          absoluteSeek(video, { ...positionState, seek: position => handler({ action: "seekto", seekTime: position }) }, sign, command.seconds, handler, intro);
+        } else if (control) absoluteSeek(video, control, sign, command.seconds, control.route, intro);
+        else if (nativeSeek) {
+          trackTransition(seekRequests, video);
+          handlers.get(command.action)({ action: command.action, seekOffset: command.seconds });
+        } else return;
         event.preventDefault();
       }
-    } catch { /* Unsupported/replaced controls fall back to native behavior. */ }
+    } catch {
+      if (command.action.startsWith("seek")) seekRequests.delete(video);
+      // Unsupported/replaced controls fall back to native behavior.
+    }
   }, true);
 })();

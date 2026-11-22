@@ -207,6 +207,58 @@ test("detects intro button inserted during playback", async (t) => {
   assert.equal(page.clicks, 1);
 });
 
+test("auto-skip waits for an arrow seek and later arrows use the intro landing position", async (t) => {
+  const page = setup(t, { markup: "", settings: { crunchyrollFiveSecondSeekEnabled: true } });
+  const { window, document, video } = page;
+  Object.defineProperty(window.navigator, "mediaSession", { value: { setActionHandler() {}, setPositionState() {} } });
+  window.eval(readFileSync(join(__dirname, "..", "crunchyroll-player-bridge.js"), "utf8"));
+  window.eval(readFileSync(join(__dirname, "..", "crunchyroll-seek.js"), "utf8"));
+  await page.flush();
+  const { mediaSession } = window.navigator;
+  const positions = [];
+  mediaSession.setActionHandler("seekto", ({ seekTime }) => positions.push(seekTime));
+  mediaSession.setPositionState({ position: 50, duration: 100 });
+  video.currentTime = 50;
+  const key = (key) => {
+    const event = new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+  };
+
+  key("ArrowRight");
+  assert.deepEqual(positions, [55]);
+  page.player.insertAdjacentHTML("beforeend", fixture);
+  await page.flush();
+  assert.equal(page.clicks, 0, "The native arrow seek is still queued");
+  assert.equal(page.notice, null);
+
+  video.currentTime = 55;
+  page.event("seeked", video);
+  page.poll();
+  await page.flush();
+  assert.equal(page.clicks, 1);
+  let seeking = true;
+  Object.defineProperty(video, "seeking", { get: () => seeking });
+  page.poll();
+  page.poll();
+  key("ArrowRight");
+  assert.deepEqual(positions, [55], "Arrows must wait even during a slow intro jump");
+
+  seeking = false;
+  video.currentTime = 80;
+  page.event("seeked", video);
+  assert.equal(page.notice.textContent, "Jumped ahead");
+  key("ArrowRight");
+  assert.deepEqual(positions, [55, 85], "The media-session clock still reports the pre-intro position");
+  video.currentTime = 85;
+  page.event("seeked", video);
+  key("ArrowLeft");
+  assert.deepEqual(positions, [55, 85, 80]);
+  page.poll();
+  await page.flush();
+  assert.equal(page.clicks, 1, "An intentional rewind must not auto-skip again");
+});
+
 for (const [name, block, unblock] of [
   ["disabled", (p) => { p.button.disabled = true; }, (p) => { p.button.disabled = false; }],
   ["aria-disabled", (p) => p.button.setAttribute("aria-disabled", "true"), (p) => p.button.removeAttribute("aria-disabled")],
